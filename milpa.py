@@ -3,7 +3,9 @@ import argparse
 import sys
 
 from src.errors import ErrorLog
+from src.ast_nodes import formatear
 from src.lexer import tokenizar
+from src.parser import parsear
 
 
 def main():
@@ -38,7 +40,14 @@ def main():
         log.imprimir()
         return 1
 
-    print(f"Análisis léxico correcto ({len(tokens) - 1} tokens). "
+    ast = parsear(tokens, log)
+    if ast is None:
+        log.imprimir()
+        return 1
+    if args.ast:
+        print(formatear(ast))
+
+    print(f"Análisis léxico y sintáctico correctos ({len(tokens) - 1} tokens). "
           "Las demás fases aún no están conectadas.")
     return 0
 

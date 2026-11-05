@@ -9,10 +9,23 @@ Palabras reservadas: zona constante entero decimal texto booleano si si_no mient
 para_cada en y o no verdadero falso
 
 ## AST (parser -> semántico)
-Cada nodo tiene: tipo_nodo, linea, col, hijos y, tras el semántico, .tipo (entero, decimal,
-texto, booleano, zona, vacio) y .val (valor constante o None).
-Nodos: Programa, DeclZona, DeclConst, DeclVar, Asig, Si, Mientras, ParaCada, Llamada,
-BinOp, UnOp, Literal, Var, Campo, LlamadaExp.
+Definido en src/ast_nodes.py. Cada nodo tiene: linea, col y, tras el semántico, .tipo
+(entero, decimal, texto, booleano, zona, vacio) y .val (valor constante o None).
+Un bloque es una lista de sentencias. Para ver un árbol: python milpa.py programa.milpa --ast
+Nodos:
+  Programa(sentencias)
+  DeclZona(nombre, campos: [CampoZona(nombre, valor)])
+  DeclConst(tipo_decl, nombre, valor)     DeclVar(tipo_decl, nombre, valor)
+  Asig(nombre, valor)
+  Si(cond, entonces, sino|None)           Mientras(cond, cuerpo)
+  Repetir(cuerpo, cond)  (opcional)       ParaCada(var, zonas: [nombres], cuerpo)
+  Llamada(nombre, args)  (sentencia o expresión)
+  BinOp(op, izq, der)    op: + - * / % == != < <= > >= y o
+  UnOp(op, operando)     op: neg, no
+  Literal(tipo_lit, valor)  valor es int, float, str o bool de Python
+  Var(nombre)            AccesoCampo(objeto, campo)
+Palabras reservadas que NO se pueden usar como nombre de variable: y, o, no, en, si, si_no,
+mientras, repetir, para_cada, zona, constante, entero, decimal, texto, booleano, verdadero, falso.
 
 ## Cuádruplo (semántico/intermedio -> optimizador -> codegen)
 Cuadruplo(op, arg1, arg2, res)
