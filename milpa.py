@@ -2,6 +2,9 @@
 import argparse
 import sys
 
+from src.errors import ErrorLog
+from src.lexer import tokenizar
+
 
 def main():
     ap = argparse.ArgumentParser(prog="milpa", description="Compilador Milpa")
@@ -22,9 +25,21 @@ def main():
     if not args.fuente:
         ap.print_help()
         return 1
+
     with open(args.fuente, encoding="utf-8") as f:
         codigo = f.read()
-    print(f"Leído {args.fuente} ({len(codigo)} caracteres). El pipeline aún no está conectado.")
+
+    log = ErrorLog()
+    tokens = tokenizar(codigo, log)
+    if args.tokens:
+        for t in tokens:
+            print(f"{t.linea}:{t.col}\t{t.tipo}\t{t.lexema}")
+    if log.hay_errores():
+        log.imprimir()
+        return 1
+
+    print(f"Análisis léxico correcto ({len(tokens) - 1} tokens). "
+          "Las demás fases aún no están conectadas.")
     return 0
 
 

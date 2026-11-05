@@ -4,3 +4,4 @@ __pycache__/
 *.asm
 !tools/prueba.asm
 .vscode/
+*.jar

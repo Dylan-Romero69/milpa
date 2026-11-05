@@ -3,6 +3,8 @@
 ## Token (lexer -> parser)
 Token(tipo, lexema, linea, col)
 Tipos: PALABRA_RESERVADA, ID, ENTERO, DECIMAL, TEXTO, OPERADOR, DELIMITADOR, EOF
+El lexema de un TEXTO es el contenido SIN las comillas. Línea y columna empiezan en 1.
+Las funciones predefinidas (leer, lloviendo, regar, registrar, a_entero) son tokens ID.
 Palabras reservadas: zona constante entero decimal texto booleano si si_no mientras repetir
 para_cada en y o no verdadero falso
 
