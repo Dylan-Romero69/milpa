@@ -1,0 +1,3 @@
+// ESPERADO: E-SEM-06
+constante entero MAX = 15
+MAX = 20

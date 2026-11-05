@@ -1,0 +1,3 @@
+// ESPERADO: E-SEM-02
+entero a = 1
+entero a = 2

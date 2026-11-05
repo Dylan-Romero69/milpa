@@ -1,0 +1,3 @@
+// ESPERADO: E-SEM-04
+zona z1 { cultivo: "maiz", humedad_min: 40.0, riego_max: 10 }
+abrir_valvula(z1)

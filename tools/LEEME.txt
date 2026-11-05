@@ -1,0 +1,1 @@
+Coloca aquí Mars4_5.jar (descárgalo de la página oficial de MARS). Ejecutar: java -jar Mars4_5.jar

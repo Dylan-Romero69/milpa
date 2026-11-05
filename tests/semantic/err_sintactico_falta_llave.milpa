@@ -1,0 +1,4 @@
+// ESPERADO: E-SIN-01
+entero x = 1
+si (x > 0) {
+    registrar("positivo")

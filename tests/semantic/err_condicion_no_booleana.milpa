@@ -1,0 +1,5 @@
+// ESPERADO: E-SEM-07
+entero x = 3
+si (x) {
+    registrar("hola")
+}

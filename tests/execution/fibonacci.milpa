@@ -1,0 +1,11 @@
+// Primeros 10 números de Fibonacci. Salida esperada: 0 1 1 2 3 5 8 13 21 34 (uno por línea)
+entero a = 0
+entero b = 1
+entero k = 0
+mientras (k < 10) {
+    registrar(a)
+    entero siguiente = a + b
+    a = b
+    b = siguiente
+    k = k + 1
+}

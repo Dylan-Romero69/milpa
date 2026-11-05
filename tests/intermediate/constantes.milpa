@@ -1,0 +1,6 @@
+// Plegado y propagación de constantes
+constante entero MINUTOS = 5
+decimal litros = 5 * 1.5
+entero duracion = MINUTOS
+decimal total = litros + duracion * 0
+registrar("Total: ", total)

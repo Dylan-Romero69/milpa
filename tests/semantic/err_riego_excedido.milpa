@@ -1,0 +1,3 @@
+// ESPERADO: E-DOM-02
+zona z1 { cultivo: "maiz", humedad_min: 40.0, riego_max: 15 }
+regar(z1, 30)

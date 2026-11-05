@@ -1,0 +1,2 @@
+// ESPERADO: E-SEM-03 (decimal a entero sin a_entero)
+entero m = 2.5 * 2

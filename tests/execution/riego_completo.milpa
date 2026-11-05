@@ -1,0 +1,19 @@
+// Caso de uso de Milpa con dos zonas
+zona huerto_norte { cultivo: "jitomate", humedad_min: 40.0, riego_max: 15 }
+zona huerto_sur { cultivo: "chile", humedad_min: 35.0, riego_max: 20 }
+decimal litros_total = 0.0
+para_cada zona z en [huerto_norte, huerto_sur] {
+    decimal humedad = leer(z, "humedad")
+    si (humedad < z.humedad_min y no lloviendo()) {
+        entero minutos = 0
+        mientras (humedad < 60.0 y minutos < 15) {
+            regar(z, 1)
+            minutos = minutos + 1
+            humedad = humedad + 2.5
+        }
+        litros_total = litros_total + minutos * 1.5
+    } si_no {
+        registrar("Zona ", z.nombre, " sin riego")
+    }
+}
+registrar("Litros totales: ", litros_total)

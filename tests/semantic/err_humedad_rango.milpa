@@ -1,0 +1,2 @@
+// ESPERADO: E-DOM-03
+zona z1 { cultivo: "maiz", humedad_min: 140.0, riego_max: 10 }

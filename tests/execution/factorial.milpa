@@ -1,0 +1,9 @@
+// Factorial de 5. Salida esperada: Factorial de 5 = 120
+entero n = 5
+entero resultado = 1
+entero i = 1
+mientras (i <= n) {
+    resultado = resultado * i
+    i = i + 1
+}
+registrar("Factorial de 5 = ", resultado)

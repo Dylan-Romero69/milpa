@@ -1,0 +1,13 @@
+// Ciclos anidados con expresión invariante dentro del bucle
+zona huerto { cultivo: "maiz", humedad_min: 40.0, riego_max: 10 }
+entero dia = 0
+mientras (dia < 3) {
+    entero turno = 0
+    mientras (turno < 2) {
+        decimal limite = 40.0 + 10.0
+        decimal doble = turno * 2
+        registrar("Dia ", dia, " turno ", turno, " limite ", limite)
+        turno = turno + 1
+    }
+    dia = dia + 1
+}

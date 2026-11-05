@@ -1,0 +1,2 @@
+// ESPERADO: E-SEM-01
+decimal x = y + 1.0

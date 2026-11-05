@@ -1,0 +1,6 @@
+// Variable nunca usada y operaciones triviales
+entero inutil = 7
+entero x = 10
+entero y = x + 0
+entero z = y * 1
+registrar("Resultado: ", z)
