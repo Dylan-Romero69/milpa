@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from src import ast_nodes as A
-from src.errors import ErrorLog
+from src.core.errors import ErrorLog
 from src.lexer import tokenizar
 from src.parser import parsear
 

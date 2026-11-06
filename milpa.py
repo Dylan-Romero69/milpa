@@ -2,7 +2,7 @@
 import argparse
 import sys
 
-from src.errors import ErrorLog
+from src.core.errors import ErrorLog
 from src.ast_nodes import formatear
 from src.lexer import tokenizar
 from src.parser import parsear
