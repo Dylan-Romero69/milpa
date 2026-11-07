@@ -1,0 +1,12 @@
+entero humedad = 50
+decimal temperatura = 25.5
+
+si (humedad > 30) {
+    registrar("La humedad es suficiente")
+} si_no {
+    regar(10)
+}
+
+mientras (humedad < 80) {
+    humedad = humedad + 5
+}

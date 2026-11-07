@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from src.core.errors import ErrorLog
-from src.lexer import tokenizar
+from old.lexer import tokenizar
 
 RAIZ = Path(__file__).resolve().parent
 

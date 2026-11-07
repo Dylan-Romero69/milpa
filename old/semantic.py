@@ -1,7 +1,7 @@
 """Análisis semántico: tipos, casting, ámbitos y validaciones V1 a V3. Responsable: A."""
 from dataclasses import dataclass
 
-from src.ast_nodes import (AccesoCampo, Asig, BinOp, DeclConst, DeclVar, DeclZona,
+from old.ast_nodes import (AccesoCampo, Asig, BinOp, DeclConst, DeclVar, DeclZona,
                            Literal, Llamada, Mientras, ParaCada, Programa, Repetir,
                            Si, UnOp, Var)
 from src.symtab import ErrorTabla

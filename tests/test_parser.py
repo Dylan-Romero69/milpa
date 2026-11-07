@@ -5,9 +5,9 @@ import re
 import unittest
 from pathlib import Path
 
-from src import ast_nodes as A
+from old import ast_nodes as A
 from src.core.errors import ErrorLog
-from src.lexer import tokenizar
+from old.lexer import tokenizar
 from src.parser import parsear
 
 RAIZ = Path(__file__).resolve().parent

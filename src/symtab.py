@@ -1,70 +1,99 @@
-"""Tabla de símbolos y de direcciones. Responsable: A."""
-from dataclasses import dataclass
 
-TAMANOS = {"entero": 4, "decimal": 4, "booleano": 4, "texto": 4, "zona": 16}
+from dataclasses import dataclass
 
 
 @dataclass
 class Simbolo:
     nombre: str
     tipo: str
-    categoria: str       # variable, constante, zona
-    nivel: int
-    direccion: str       # etiqueta en .data
-    tamano: int
+    categoria: str
     valor: object = None
-    inicializada: bool = False
-    desplazamiento: int = 0   # bytes desde el inicio de los datos
-
-
-class ErrorTabla(Exception):
-    """Redeclaración (siempre es E-SEM-02)."""
+    linea: int = 0
+    columna: int = 0
+    ambito: int = 0
 
 
 class TablaSimbolos:
     def __init__(self):
-        self.ambitos = [{}]   # el primero es el global
-        self.todos = []       # todos los símbolos, para imprimir al final
-        self.veces = {}       # cuántas veces se declaró cada nombre
+        # Cada diccionario representa un ámbito
+        self.ambitos = [{}]
+        self.nivel = 0
 
-    def abrir_ambito(self):
+    def entrar_ambito(self):
+        """Crea un nuevo ámbito."""
         self.ambitos.append({})
+        self.nivel += 1
 
-    def cerrar_ambito(self):
-        self.ambitos.pop()
+    def salir_ambito(self):
+        """Elimina el ámbito actual."""
+        if self.nivel > 0:
+            self.ambitos.pop()
+            self.nivel -= 1
 
-    def declarar(self, nombre, tipo, categoria, valor=None, inicializada=False):
-        if nombre in self.ambitos[-1]:
-            raise ErrorTabla(f"'{nombre}' ya está declarado en este ámbito")
-        for ambito in self.ambitos[:-1]:
+    def existe(self, nombre):
+        """Comprueba si un nombre ya fue declarado."""
+        for ambito in self.ambitos:
             if nombre in ambito:
-                raise ErrorTabla(f"'{nombre}' oculta una variable externa")
-        self.veces[nombre] = self.veces.get(nombre, 0) + 1
-        direccion = ("z_" if categoria == "zona" else "v_") + nombre
-        if len(self.ambitos) > 1:                  # dentro de un bloque: v_x_1, v_x_2...
-            direccion += f"_{self.veces[nombre]}"
-        s = Simbolo(nombre, tipo, categoria, len(self.ambitos) - 1, direccion,
-                    TAMANOS[tipo], valor, inicializada, self.tamano_datos())
-        self.ambitos[-1][nombre] = s
-        self.todos.append(s)
-        return s
+                return True
+        return False
+
+    def declarar(self, simbolo):
+        """Registra un símbolo si no existe previamente."""
+        if self.existe(simbolo.nombre):
+            return False
+
+        simbolo.ambito = self.nivel
+        self.ambitos[-1][simbolo.nombre] = simbolo
+        return True
 
     def buscar(self, nombre):
+        """Busca un símbolo desde el ámbito actual hacia afuera."""
         for ambito in reversed(self.ambitos):
             if nombre in ambito:
                 return ambito[nombre]
+
         return None
 
-    def tamano_datos(self):
-        return sum(s.tamano for s in self.todos)
+    def actualizar_valor(self, nombre, valor):
+        """Actualiza el valor de un símbolo."""
+        simbolo = self.buscar(nombre)
+
+        if simbolo is None:
+            return False
+
+        simbolo.valor = valor
+        return True
+
+    def obtener_todos(self):
+        """Devuelve todos los símbolos registrados."""
+        simbolos = []
+
+        for ambito in self.ambitos:
+            simbolos.extend(ambito.values())
+
+        return simbolos
 
     def imprimir(self):
-        print(f"{'Nombre':<14}{'Tipo':<10}{'Categoría':<11}{'Nivel':<6}"
-              f"{'Dirección':<16}{'Desp.':<6}{'Tamaño':<9}Valor / Inic.")
-        for s in self.todos:
-            info = "sí" if s.inicializada else "no"
-            if s.valor is not None:
-                info = f"{s.valor} / {info}"
-            print(f"{s.nombre:<14}{s.tipo:<10}{s.categoria:<11}{s.nivel:<6}"
-                  f"{s.direccion:<16}{s.desplazamiento:<6}{s.tamano} bytes  {info}")
-        print(f"Total de datos: {self.tamano_datos()} bytes")
+        """Muestra la tabla de símbolos."""
+        print("\n========== TABLA DE SIMBOLOS ==========")
+        print(
+            f"{'NOMBRE':<18}"
+            f"{'TIPO':<12}"
+            f"{'CATEGORIA':<15}"
+            f"{'VALOR':<15}"
+            f"{'AMBITO':<8}"
+        )
+        print("-" * 68)
+
+        for simbolo in self.obtener_todos():
+            valor = simbolo.valor
+
+            print(
+                f"{simbolo.nombre:<18}"
+                f"{simbolo.tipo:<12}"
+                f"{simbolo.categoria:<15}"
+                f"{str(valor):<15}"
+                f"{simbolo.ambito:<8}"
+            )
+
+        print("=" * 68)

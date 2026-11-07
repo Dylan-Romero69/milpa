@@ -1,293 +1,578 @@
-"""Analizador sintáctico descendente recursivo: tokens -> AST. Responsable: A.
 
-Sigue la GLC del documento de definición. Se detiene en el primer error
-(E-SIN-01) y lo registra en el log con la posición del token problemático.
-Devuelve un Programa, o None si hubo error.
 """
-from src import ast_nodes as A
+Analizador sintáctico del lenguaje MILPA.
 
-TIPOS = {"entero", "decimal", "texto", "booleano"}
-OP_REL = {"==", "!=", "<", "<=", ">", ">="}
+Recibe los tokens del lexer y construye el AST.
+Utiliza análisis descendente recursivo.
+"""
+
+from src.frontend.ast_nodes import (
+    Programa,
+    DeclaracionVariable,
+    DeclaracionConstante,
+    DeclaracionZona,
+    CampoZona,
+    Asignacion,
+    Condicional,
+    CicloMientras,
+    CicloParaCada,
+    LlamadaFuncion,
+    OperacionBinaria,
+    OperacionUnaria,
+    Literal,
+    Identificador,
+    AccesoCampo
+)
 
 
 class ErrorSintactico(Exception):
-    def __init__(self, token, mensaje):
-        super().__init__(mensaje)
-        self.token = token
-        self.mensaje = mensaje
-
-
-def describir(tok):
-    if tok.tipo == "EOF":
-        return "el fin del archivo"
-    if tok.tipo == "TEXTO":
-        return f'el texto "{tok.lexema}"'
-    return f"'{tok.lexema}'"
+    """Detiene el análisis cuando encuentra un error sintáctico."""
+    pass
 
 
 class Parser:
-    def __init__(self, tokens):
-        self.t = tokens
-        self.i = 0
 
-    # ---- utilidades ----
-    @property
+    TIPOS = {
+        "TIPO_ENTERO": "entero",
+        "TIPO_DECIMAL": "decimal",
+        "TIPO_TEXTO": "texto",
+        "TIPO_BOOLEANO": "booleano"
+    }
+
+    OPERADORES = {
+        "SUMA": "+",
+        "RESTA": "-",
+        "MULTIPLICACION": "*",
+        "DIVISION": "/",
+        "MODULO": "%",
+        "IGUAL": "==",
+        "DIFERENTE": "!=",
+        "MENOR": "<",
+        "MENOR_IGUAL": "<=",
+        "MAYOR": ">",
+        "MAYOR_IGUAL": ">="
+    }
+
+    def __init__(self, tokens, errores=None):
+        self.tokens = tokens
+        self.errores = errores
+        self.posicion = 0
+
+    # Devuelve el token actual
     def actual(self):
-        return self.t[self.i]
+        if self.posicion >= len(self.tokens):
+            return self.tokens[-1]
 
+        return self.tokens[self.posicion]
+
+    # Devuelve el siguiente token
     def siguiente(self):
-        return self.t[min(self.i + 1, len(self.t) - 1)]
+        posicion = self.posicion + 1
 
+        if posicion >= len(self.tokens):
+            return self.tokens[-1]
+
+        return self.tokens[posicion]
+
+    # Comprueba si el token actual tiene determinado tipo
+    def comprobar(self, tipo):
+        return self.actual().tipo == tipo
+
+    # Avanza al siguiente token
     def avanzar(self):
-        tok = self.t[self.i]
-        if tok.tipo != "EOF":
-            self.i += 1
-        return tok
+        token = self.actual()
 
-    def es(self, tipo, lexema=None):
-        tok = self.actual
-        return tok.tipo == tipo and (lexema is None or tok.lexema == lexema)
+        if token.tipo != "EOF":
+            self.posicion += 1
 
-    def espera(self, tipo, lexema=None, que=None):
-        if self.es(tipo, lexema):
+        return token
+
+    # Exige un tipo de token determinado
+    def consumir(self, tipo):
+        if self.comprobar(tipo):
             return self.avanzar()
-        if que is None:
-            que = f"'{lexema}'" if lexema else tipo
-        raise ErrorSintactico(
-            self.actual, f"se esperaba {que} pero se encontró {describir(self.actual)}")
 
-    # ---- programa y sentencias ----
-    def programa(self):
-        sentencias = []
-        while not self.es("EOF"):
-            sentencias.append(self.sentencia())
-        return A.Programa(sentencias=sentencias, linea=1, col=1)
+        self.error(
+            f"Se esperaba {tipo}, pero se encontró "
+            f"{self.actual().tipo}"
+        )
 
-    def bloque(self):
-        self.espera("DELIMITADOR", "{")
-        sentencias = []
-        while not self.es("DELIMITADOR", "}"):
-            if self.es("EOF"):
-                raise ErrorSintactico(
-                    self.actual, "se esperaba '}' pero se encontró el fin del archivo "
-                                 "(falta cerrar un bloque)")
-            sentencias.append(self.sentencia())
-        self.avanzar()  # }
-        return sentencias
+    # Registra un error sintáctico
+    def error(self, mensaje):
+        token = self.actual()
 
+        if self.errores is not None:
+            self.errores.agregar(
+                "sintáctico",
+                "E-SIN-01",
+                token.linea,
+                token.columna,
+                mensaje
+            )
+
+        raise ErrorSintactico(mensaje)
+
+    # Comprueba si el identificador actual es una palabra lógica
+    def comprobar_logico(self, palabra):
+        return (
+            self.comprobar("ID")
+            and self.actual().valor == palabra
+        )
+
+    # Analiza el programa completo
+    def analizar(self):
+        instrucciones = []
+
+        try:
+            while not self.comprobar("EOF"):
+                instrucciones.append(self.sentencia())
+
+            return Programa(instrucciones=instrucciones)
+
+        except ErrorSintactico:
+            return None
+
+    # Determina qué tipo de sentencia debe analizar
     def sentencia(self):
-        tok = self.actual
-        if tok.tipo == "PALABRA_RESERVADA":
-            lx = tok.lexema
-            if lx == "zona":
-                return self.decl_zona()
-            if lx == "constante":
-                return self.decl_const()
-            if lx in TIPOS:
-                return self.decl_var()
-            if lx == "si":
-                return self.si()
-            if lx == "mientras":
-                return self.mientras()
-            if lx == "repetir":
-                return self.repetir()
-            if lx == "para_cada":
-                return self.para_cada()
-            raise ErrorSintactico(tok, f"no se esperaba '{lx}' aquí")
-        if tok.tipo == "ID":
-            sig = self.siguiente()
-            if sig.tipo == "OPERADOR" and sig.lexema == "=":
-                return self.asignacion()
-            if sig.tipo == "DELIMITADOR" and sig.lexema == "(":
-                return self.llamada()
-            raise ErrorSintactico(
-                sig, f"se esperaba '=' o '(' después de '{tok.lexema}' "
-                     f"pero se encontró {describir(sig)}")
-        raise ErrorSintactico(tok, f"sentencia inesperada: {describir(tok)}")
 
-    def decl_zona(self):
-        tok = self.avanzar()  # zona
-        nombre = self.espera("ID", que="un nombre de zona").lexema
-        self.espera("DELIMITADOR", "{")
-        campos = [self.campo_zona()]
-        while self.es("DELIMITADOR", ","):
+        if self.comprobar("ZONA"):
+            return self.declaracion_zona()
+
+        if self.comprobar("CONSTANTE"):
+            return self.declaracion_constante()
+
+        if self.actual().tipo in self.TIPOS:
+            return self.declaracion_variable()
+
+        if self.comprobar("SI"):
+            return self.condicional()
+
+        if self.comprobar("MIENTRAS"):
+            return self.ciclo_mientras()
+
+        if self.comprobar("PARA_CADA"):
+            return self.ciclo_para_cada()
+
+        if self.comprobar("ID"):
+            return self.sentencia_identificador()
+
+        self.error("Sentencia no válida")
+
+    # Analiza declaraciones de variables
+    def declaracion_variable(self):
+        token_tipo = self.avanzar()
+        tipo = self.TIPOS[token_tipo.tipo]
+
+        nombre = self.consumir("ID")
+
+        self.consumir("ASIGNACION")
+
+        valor = self.expresion()
+
+        return DeclaracionVariable(
+            tipo=tipo,
+            nombre=nombre.valor,
+            valor=valor,
+            linea=token_tipo.linea,
+            columna=token_tipo.columna
+        )
+
+    # Analiza declaraciones de constantes
+    def declaracion_constante(self):
+        inicio = self.consumir("CONSTANTE")
+
+        token_tipo = self.actual()
+
+        if token_tipo.tipo not in self.TIPOS:
+            self.error("Se esperaba un tipo de dato")
+
+        tipo = self.TIPOS[self.avanzar().tipo]
+
+        nombre = self.consumir("ID")
+
+        self.consumir("ASIGNACION")
+
+        valor = self.expresion()
+
+        return DeclaracionConstante(
+            tipo=tipo,
+            nombre=nombre.valor,
+            valor=valor,
+            linea=inicio.linea,
+            columna=inicio.columna
+        )
+
+    # Analiza declaraciones de zonas
+    def declaracion_zona(self):
+        inicio = self.consumir("ZONA")
+        nombre = self.consumir("ID")
+
+        self.consumir("LLAVE_ABRE")
+
+        campos = []
+
+        while not self.comprobar("LLAVE_CIERRA"):
+            campo = self.consumir("ID")
+
+            self.consumir("DOS_PUNTOS")
+
+            valor = self.expresion()
+
+            campos.append(
+                CampoZona(
+                    nombre=campo.valor,
+                    valor=valor,
+                    linea=campo.linea,
+                    columna=campo.columna
+                )
+            )
+
+            if not self.comprobar("LLAVE_CIERRA"):
+                self.consumir("COMA")
+
+        self.consumir("LLAVE_CIERRA")
+
+        return DeclaracionZona(
+            nombre=nombre.valor,
+            campos=campos,
+            linea=inicio.linea,
+            columna=inicio.columna
+        )
+
+    # Analiza asignaciones o llamadas a funciones
+    def sentencia_identificador(self):
+        nombre = self.consumir("ID")
+
+        # Comprueba si es una asignación
+        if self.comprobar("ASIGNACION"):
             self.avanzar()
-            campos.append(self.campo_zona())
-        self.espera("DELIMITADOR", "}")
-        return A.DeclZona(nombre=nombre, campos=campos, linea=tok.linea, col=tok.col)
 
-    def campo_zona(self):
-        tok = self.espera("ID", que="un nombre de campo")
-        self.espera("DELIMITADOR", ":")
-        return A.CampoZona(nombre=tok.lexema, valor=self.exp(), linea=tok.linea, col=tok.col)
+            valor = self.expresion()
 
-    def decl_const(self):
-        tok = self.avanzar()  # constante
-        if not (self.actual.tipo == "PALABRA_RESERVADA" and self.actual.lexema in TIPOS):
-            raise ErrorSintactico(
-                self.actual, f"se esperaba un tipo (entero, decimal, texto o booleano) "
-                             f"pero se encontró {describir(self.actual)}")
-        tipo = self.avanzar().lexema
-        nombre = self.espera("ID", que="un nombre de constante").lexema
-        self.espera("OPERADOR", "=")
-        return A.DeclConst(tipo_decl=tipo, nombre=nombre, valor=self.exp(),
-                           linea=tok.linea, col=tok.col)
+            return Asignacion(
+                nombre=nombre.valor,
+                valor=valor,
+                linea=nombre.linea,
+                columna=nombre.columna
+            )
 
-    def decl_var(self):
-        tok = self.avanzar()  # tipo
-        nombre = self.espera("ID", que="un nombre de variable").lexema
-        self.espera("OPERADOR", "=")
-        return A.DeclVar(tipo_decl=tok.lexema, nombre=nombre, valor=self.exp(),
-                         linea=tok.linea, col=tok.col)
+        # Comprueba si es una llamada a función
+        if self.comprobar("PARENTESIS_ABRE"):
+            return self.llamada_funcion(nombre)
 
-    def asignacion(self):
-        tok = self.avanzar()  # ID
-        self.avanzar()        # =
-        return A.Asig(nombre=tok.lexema, valor=self.exp(), linea=tok.linea, col=tok.col)
+        self.error("Se esperaba una asignación o llamada a función")
 
-    def si(self):
-        tok = self.avanzar()  # si
-        self.espera("DELIMITADOR", "(")
-        cond = self.exp()
-        self.espera("DELIMITADOR", ")")
-        entonces = self.bloque()
-        sino = None
-        if self.es("PALABRA_RESERVADA", "si_no"):
-            self.avanzar()
-            sino = self.bloque()
-        return A.Si(cond=cond, entonces=entonces, sino=sino, linea=tok.linea, col=tok.col)
+    # Analiza llamadas a funciones
+    def llamada_funcion(self, nombre=None):
 
-    def mientras(self):
-        tok = self.avanzar()  # mientras
-        self.espera("DELIMITADOR", "(")
-        cond = self.exp()
-        self.espera("DELIMITADOR", ")")
-        return A.Mientras(cond=cond, cuerpo=self.bloque(), linea=tok.linea, col=tok.col)
+        if nombre is None:
+            nombre = self.consumir("ID")
 
-    def repetir(self):
-        tok = self.avanzar()  # repetir
-        cuerpo = self.bloque()
-        self.espera("PALABRA_RESERVADA", "mientras")
-        self.espera("DELIMITADOR", "(")
-        cond = self.exp()
-        self.espera("DELIMITADOR", ")")
-        return A.Repetir(cuerpo=cuerpo, cond=cond, linea=tok.linea, col=tok.col)
+        self.consumir("PARENTESIS_ABRE")
 
-    def para_cada(self):
-        tok = self.avanzar()  # para_cada
-        self.espera("PALABRA_RESERVADA", "zona")
-        var = self.espera("ID", que="un nombre para la zona").lexema
-        self.espera("PALABRA_RESERVADA", "en")
-        self.espera("DELIMITADOR", "[")
-        zonas = [self.espera("ID", que="el nombre de una zona").lexema]
-        while self.es("DELIMITADOR", ","):
-            self.avanzar()
-            zonas.append(self.espera("ID", que="el nombre de una zona").lexema)
-        self.espera("DELIMITADOR", "]")
-        return A.ParaCada(var=var, zonas=zonas, cuerpo=self.bloque(),
-                          linea=tok.linea, col=tok.col)
+        argumentos = []
 
-    def llamada(self):
-        tok = self.avanzar()  # ID
-        self.espera("DELIMITADOR", "(")
-        args = []
-        if not self.es("DELIMITADOR", ")"):
-            args.append(self.exp())
-            while self.es("DELIMITADOR", ","):
+        if not self.comprobar("PARENTESIS_CIERRA"):
+            argumentos.append(self.expresion())
+
+            while self.comprobar("COMA"):
                 self.avanzar()
-                args.append(self.exp())
-        self.espera("DELIMITADOR", ")")
-        return A.Llamada(nombre=tok.lexema, args=args, linea=tok.linea, col=tok.col)
+                argumentos.append(self.expresion())
 
-    # ---- expresiones (de menor a mayor precedencia) ----
-    def exp(self):
-        izq = self.exp_y()
-        while self.es("PALABRA_RESERVADA", "o"):
-            op = self.avanzar()
-            izq = A.BinOp(op="o", izq=izq, der=self.exp_y(), linea=op.linea, col=op.col)
-        return izq
+        self.consumir("PARENTESIS_CIERRA")
 
-    def exp_y(self):
-        izq = self.exp_no()
-        while self.es("PALABRA_RESERVADA", "y"):
-            op = self.avanzar()
-            izq = A.BinOp(op="y", izq=izq, der=self.exp_no(), linea=op.linea, col=op.col)
-        return izq
+        return LlamadaFuncion(
+            nombre=nombre.valor,
+            argumentos=argumentos,
+            linea=nombre.linea,
+            columna=nombre.columna
+        )
 
-    def exp_no(self):
-        if self.es("PALABRA_RESERVADA", "no"):
-            op = self.avanzar()
-            return A.UnOp(op="no", operando=self.exp_no(), linea=op.linea, col=op.col)
-        return self.exp_rel()
+    # Analiza una condición si / si_no
+    def condicional(self):
+        inicio = self.consumir("SI")
 
-    def exp_rel(self):
-        izq = self.exp_arit()
-        if self.actual.tipo == "OPERADOR" and self.actual.lexema in OP_REL:
-            op = self.avanzar()
-            izq = A.BinOp(op=op.lexema, izq=izq, der=self.exp_arit(),
-                          linea=op.linea, col=op.col)
-        return izq
+        self.consumir("PARENTESIS_ABRE")
+        condicion = self.expresion()
+        self.consumir("PARENTESIS_CIERRA")
 
-    def exp_arit(self):
-        izq = self.termino()
-        while self.actual.tipo == "OPERADOR" and self.actual.lexema in ("+", "-"):
-            op = self.avanzar()
-            izq = A.BinOp(op=op.lexema, izq=izq, der=self.termino(),
-                          linea=op.linea, col=op.col)
-        return izq
+        bloque_si = self.bloque()
+        bloque_si_no = []
 
+        if self.comprobar("SI_NO"):
+            self.avanzar()
+            bloque_si_no = self.bloque()
+
+        return Condicional(
+            condicion=condicion,
+            bloque_si=bloque_si,
+            bloque_si_no=bloque_si_no,
+            linea=inicio.linea,
+            columna=inicio.columna
+        )
+
+    # Analiza un ciclo mientras
+    def ciclo_mientras(self):
+        inicio = self.consumir("MIENTRAS")
+
+        self.consumir("PARENTESIS_ABRE")
+        condicion = self.expresion()
+        self.consumir("PARENTESIS_CIERRA")
+
+        instrucciones = self.bloque()
+
+        return CicloMientras(
+            condicion=condicion,
+            instrucciones=instrucciones,
+            linea=inicio.linea,
+            columna=inicio.columna
+        )
+
+    # Analiza un ciclo para_cada
+    def ciclo_para_cada(self):
+        inicio = self.consumir("PARA_CADA")
+
+        self.consumir("ZONA")
+
+        variable = self.consumir("ID")
+
+        self.consumir("EN")
+        self.consumir("CORCHETE_ABRE")
+
+        zonas = [self.consumir("ID").valor]
+
+        while self.comprobar("COMA"):
+            self.avanzar()
+            zonas.append(self.consumir("ID").valor)
+
+        self.consumir("CORCHETE_CIERRA")
+
+        instrucciones = self.bloque()
+
+        return CicloParaCada(
+            tipo="zona",
+            variable=variable.valor,
+            zonas=zonas,
+            instrucciones=instrucciones,
+            linea=inicio.linea,
+            columna=inicio.columna
+        )
+
+    # Analiza un bloque de instrucciones
+    def bloque(self):
+        self.consumir("LLAVE_ABRE")
+
+        instrucciones = []
+
+        while not self.comprobar("LLAVE_CIERRA"):
+            if self.comprobar("EOF"):
+                self.error("Bloque sin llave de cierre")
+
+            instrucciones.append(self.sentencia())
+
+        self.consumir("LLAVE_CIERRA")
+
+        return instrucciones
+
+    # Expresiones lógicas OR
+    def expresion(self):
+        izquierda = self.expresion_y()
+
+        while self.comprobar_logico("o"):
+            operador = self.avanzar()
+
+            derecha = self.expresion_y()
+
+            izquierda = OperacionBinaria(
+                izquierda=izquierda,
+                operador=operador.valor,
+                derecha=derecha
+            )
+
+        return izquierda
+
+    # Expresiones lógicas AND
+    def expresion_y(self):
+        izquierda = self.expresion_no()
+
+        while self.comprobar_logico("y"):
+            operador = self.avanzar()
+
+            derecha = self.expresion_no()
+
+            izquierda = OperacionBinaria(
+                izquierda=izquierda,
+                operador=operador.valor,
+                derecha=derecha
+            )
+
+        return izquierda
+
+    # Negación lógica
+    def expresion_no(self):
+
+        if self.comprobar_logico("no"):
+            operador = self.avanzar()
+
+            return OperacionUnaria(
+                operador=operador.valor,
+                operando=self.expresion_no()
+            )
+
+        return self.expresion_relacional()
+
+    # Expresiones relacionales
+    def expresion_relacional(self):
+        izquierda = self.expresion_aritmetica()
+
+        if self.actual().tipo in (
+            "IGUAL",
+            "DIFERENTE",
+            "MENOR",
+            "MENOR_IGUAL",
+            "MAYOR",
+            "MAYOR_IGUAL"
+        ):
+            operador = self.avanzar()
+
+            derecha = self.expresion_aritmetica()
+
+            return OperacionBinaria(
+                izquierda=izquierda,
+                operador=self.OPERADORES[operador.tipo],
+                derecha=derecha
+            )
+
+        return izquierda
+
+    # Sumas y restas
+    def expresion_aritmetica(self):
+        izquierda = self.termino()
+
+        while self.comprobar("SUMA") or self.comprobar("RESTA"):
+            operador = self.avanzar()
+
+            derecha = self.termino()
+
+            izquierda = OperacionBinaria(
+                izquierda=izquierda,
+                operador=self.OPERADORES[operador.tipo],
+                derecha=derecha
+            )
+
+        return izquierda
+
+    # Multiplicaciones, divisiones y módulos
     def termino(self):
-        izq = self.factor()
-        while self.actual.tipo == "OPERADOR" and self.actual.lexema in ("*", "/", "%"):
-            op = self.avanzar()
-            izq = A.BinOp(op=op.lexema, izq=izq, der=self.factor(),
-                          linea=op.linea, col=op.col)
-        return izq
+        izquierda = self.factor()
 
+        while self.actual().tipo in (
+            "MULTIPLICACION",
+            "DIVISION",
+            "MODULO"
+        ):
+            operador = self.avanzar()
+
+            derecha = self.factor()
+
+            izquierda = OperacionBinaria(
+                izquierda=izquierda,
+                operador=self.OPERADORES[operador.tipo],
+                derecha=derecha
+            )
+
+        return izquierda
+
+    # Factores y operaciones unarias
     def factor(self):
-        if self.es("OPERADOR", "-"):
-            op = self.avanzar()
-            return A.UnOp(op="neg", operando=self.factor(), linea=op.linea, col=op.col)
+
+        if self.comprobar("RESTA"):
+            self.avanzar()
+
+            return OperacionUnaria(
+                operador="-",
+                operando=self.factor()
+            )
+
         return self.primario()
 
+    # Analiza los elementos básicos de una expresión
     def primario(self):
-        tok = self.actual
-        pos = dict(linea=tok.linea, col=tok.col)
-        if tok.tipo == "ENTERO":
-            self.avanzar()
-            return A.Literal(tipo_lit="entero", valor=int(tok.lexema), **pos)
-        if tok.tipo == "DECIMAL":
-            self.avanzar()
-            return A.Literal(tipo_lit="decimal", valor=float(tok.lexema), **pos)
-        if tok.tipo == "TEXTO":
-            self.avanzar()
-            return A.Literal(tipo_lit="texto", valor=tok.lexema, **pos)
-        if tok.tipo == "PALABRA_RESERVADA" and tok.lexema in ("verdadero", "falso"):
-            self.avanzar()
-            return A.Literal(tipo_lit="booleano", valor=(tok.lexema == "verdadero"), **pos)
-        if tok.tipo == "ID":
-            sig = self.siguiente()
-            if sig.tipo == "DELIMITADOR" and sig.lexema == ".":
-                self.avanzar()
-                self.avanzar()
-                campo = self.espera("ID", que="el nombre de un campo").lexema
-                return A.AccesoCampo(objeto=tok.lexema, campo=campo, **pos)
-            if sig.tipo == "DELIMITADOR" and sig.lexema == "(":
-                return self.llamada()
-            self.avanzar()
-            return A.Var(nombre=tok.lexema, **pos)
-        if self.es("DELIMITADOR", "("):
-            self.avanzar()
-            e = self.exp()
-            self.espera("DELIMITADOR", ")")
-            return e
-        raise ErrorSintactico(tok, f"se esperaba una expresión pero se encontró {describir(tok)}")
 
+        token = self.actual()
 
-def parsear(tokens, log):
-    """Devuelve el Programa (AST) o None si hay un error sintáctico (queda en `log`)."""
-    try:
-        return Parser(tokens).programa()
-    except ErrorSintactico as e:
-        log.agregar("sintáctico", "E-SIN-01", e.token.linea, e.token.col, e.mensaje)
-        return None
+        if self.comprobar("ENTERO"):
+            self.avanzar()
+
+            return Literal(
+                valor=int(token.valor),
+                tipo="entero",
+                linea=token.linea,
+                columna=token.columna
+            )
+
+        if self.comprobar("DECIMAL"):
+            self.avanzar()
+
+            return Literal(
+                valor=float(token.valor),
+                tipo="decimal",
+                linea=token.linea,
+                columna=token.columna
+            )
+
+        if self.comprobar("TEXTO"):
+            self.avanzar()
+
+            return Literal(
+                valor=token.valor,
+                tipo="texto",
+                linea=token.linea,
+                columna=token.columna
+            )
+
+        if self.comprobar("VERDADERO") or self.comprobar("FALSO"):
+            self.avanzar()
+
+            return Literal(
+                valor=token.tipo == "VERDADERO",
+                tipo="booleano",
+                linea=token.linea,
+                columna=token.columna
+            )
+
+        if self.comprobar("ID"):
+
+            nombre = self.avanzar()
+
+            if self.comprobar("PARENTESIS_ABRE"):
+                return self.llamada_funcion(nombre)
+
+            if self.comprobar("PUNTO"):
+                self.avanzar()
+
+                campo = self.consumir("ID")
+
+                return AccesoCampo(
+                    zona=nombre.valor,
+                    campo=campo.valor,
+                    linea=nombre.linea,
+                    columna=nombre.columna
+                )
+
+            return Identificador(
+                nombre=nombre.valor,
+                linea=nombre.linea,
+                columna=nombre.columna
+            )
+
+        if self.comprobar("PARENTESIS_ABRE"):
+            self.avanzar()
+
+            expresion = self.expresion()
+
+            self.consumir("PARENTESIS_CIERRA")
+
+            return expresion
+
+        self.error("Expresión no válida")
