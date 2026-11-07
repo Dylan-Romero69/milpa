@@ -1,0 +1,7 @@
+zona parcela_1_2 {
+    cultivo: "fresas",
+    humedad_min: 50,
+    riego_max: 4
+}
+entero humedad_actual_1_2 = 96
+texto estado_cultivo_1_2 = "dañada"

@@ -1,0 +1,4 @@
+texto lectura = leer()
+entero cantidad = a_entero("8")
+booleano llueve = lloviendo()
+registrar("Lectura recibida")

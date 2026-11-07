@@ -1,0 +1,7 @@
+entero humedad = 25
+entero limite = 40
+mientras (humedad < limite) {
+    regar(1)
+    humedad = humedad + 5
+}
+registrar("Ciclo de riego terminado")

@@ -1,0 +1,4 @@
+entero plantas = 12
+entero nuevas = 3
+entero total = plantas + nuevas
+registrar("Total de plantas calculado")

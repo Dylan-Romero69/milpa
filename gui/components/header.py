@@ -12,6 +12,7 @@ from gui.config.fonts import FONTS
 def crear_header(
     parent,
     on_save,
+    on_open,
     on_run,
     on_clear,
     on_examples,
@@ -40,7 +41,7 @@ def crear_header(
 
     tk.Label(
         logo,
-        text="🌱 Milpa",
+        text="◆ Milpa",
         bg=COLORS["white"],
         fg=COLORS["primary_dark"],
         font=FONTS["logo"]
@@ -48,7 +49,7 @@ def crear_header(
 
     tk.Label(
         logo,
-        text="Programa tu huerto sin saber programar",
+        text="Programa, diseña y simula tu huerto",
         bg=COLORS["white"],
         fg="#423B32",
         font=FONTS["subtitle"]
@@ -71,20 +72,26 @@ def crear_header(
 
     _crear_boton(
         acciones,
-        "💾\nGuardar",
+        "▱\nAbrir",
+        on_open
+    )
+
+    _crear_boton(
+        acciones,
+        "▣\nGuardar",
         on_save
     )
 
     _crear_boton(
         acciones,
-        "▶\nEjecutar",
+        "▷\nEjecutar",
         on_run,
         principal=True
     )
 
     _crear_boton(
         acciones,
-        "🗑\nLimpiar",
+        "⌫\nLimpiar",
         on_clear
     )
 

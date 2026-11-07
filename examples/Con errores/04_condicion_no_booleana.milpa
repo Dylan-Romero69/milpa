@@ -1,0 +1,4 @@
+entero humedad = 30
+si (humedad) {
+    regar(1)
+}

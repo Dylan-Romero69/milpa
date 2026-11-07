@@ -1,0 +1,6 @@
+entero humedad = 32
+si (humedad < 40) {
+    registrar("La tierra necesita agua")
+} si_no {
+    registrar("La humedad es adecuada")
+}

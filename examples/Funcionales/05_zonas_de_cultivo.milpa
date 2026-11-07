@@ -1,0 +1,13 @@
+zona norte {
+    cultivo: "tomate",
+    humedad_min: 35,
+    riego_max: 5
+}
+zona sur {
+    cultivo: "maiz",
+    humedad_min: 30,
+    riego_max: 4
+}
+para_cada zona sector en [norte, sur] {
+    registrar("Revisando una zona")
+}

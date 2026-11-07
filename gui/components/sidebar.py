@@ -11,12 +11,10 @@ from gui.config.fonts import FONTS
 
 OPCIONES = [
     ("⌂", "Inicio"),
-    ("▤", "Nuevo programa"),
-    ("▣", "Ejemplos"),
-    ("🌱", "Zonas y cultivos"),
-    ("💧", "Simulador"),
-    ("▥", "Registros"),
-    ("⚙", "Configuración"),
+    ("＋", "Nuevo programa"),
+    ("▧", "Ejemplos"),
+    ("◉", "Simulador"),
+    ("⌘", "Configuración"),
 ]
 
 
@@ -47,7 +45,7 @@ class Sidebar:
             text="ESPACIO DE TRABAJO",
             bg=COLORS["sidebar"],
             fg=COLORS["text_secondary"],
-            font=("Segoe UI", 8, "bold"),
+            font=("Aptos", 8, "bold"),
             anchor="w"
         ).pack(fill="x", padx=18, pady=(20, 12))
 
@@ -84,19 +82,20 @@ class Sidebar:
 
         tk.Label(
             self.frame,
-            text="🌿\n\nMILPA\n\nCuidando tus cultivos\ncon tecnología",
+            text="MILPA\n\nCuidando tus cultivos\ncon tecnología",
             bg=COLORS["sidebar"],
             fg=COLORS["primary"],
-            font=("Segoe UI", 12, "italic"),
+            font=("Aptos", 12, "italic"),
             justify="center"
         ).pack(side="bottom", pady=30)
 
     def navegar(self, nombre):
+        self.marcar_activo(nombre)
+        self.on_navigate(nombre)
 
+    def marcar_activo(self, nombre):
         for opcion, boton in self.buttons.items():
-
             seleccionado = opcion == nombre
-
             boton.configure(
                 bg=COLORS["primary"] if seleccionado
                 else COLORS["sidebar"],
@@ -104,5 +103,3 @@ class Sidebar:
                 fg=COLORS["white"] if seleccionado
                 else COLORS["text"]
             )
-
-        self.on_navigate(nombre)
