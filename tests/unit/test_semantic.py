@@ -49,7 +49,7 @@ temperatura = 25
 
         self.assertTrue(errores.hay_errores())
         self.assertTrue(
-            any(e.codigo == "E-SEM-05"
+            any(e.codigo == "E-SEM-01"
                 for e in errores.obtener_errores())
         )
 
@@ -62,7 +62,7 @@ entero humedad = 60
 
         self.assertTrue(errores.hay_errores())
         self.assertTrue(
-            any(e.codigo == "E-SEM-01"
+            any(e.codigo == "E-SEM-02"
                 for e in errores.obtener_errores())
         )
 

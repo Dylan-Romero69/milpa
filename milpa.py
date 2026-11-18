@@ -100,6 +100,9 @@ def main():
     semantico = AnalizadorSemantico(log)
     semantico.analizar(ast)
 
+    if args.simbolos:
+        semantico.tabla.imprimir()
+
     if log.hay_errores():
         log.imprimir()
         return 1
@@ -146,5 +149,19 @@ def main():
     return 0
 
 
+def ejecutar():
+    """Ejecuta el compilador sin que un programa extraño lo haga caerse con un error de Python."""
+    sys.setrecursionlimit(10000)
+    try:
+        return main()
+    except RecursionError:
+        print("Error: el programa tiene expresiones o bloques demasiado anidados.")
+        return 1
+    except Exception as error:
+        print(f"Error interno del compilador ({type(error).__name__}: {error}).")
+        print("Revisa el programa fuente; si el problema continúa, avisa al equipo.")
+        return 1
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(ejecutar())

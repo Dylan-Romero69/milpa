@@ -4,8 +4,23 @@ Analizador léxico del lenguaje MILPA.
 Convierte el codigo fuente en una secuencia de tokens
 """
 
+import re
 from dataclasses import dataclass
 from src.core.errors import ErrorLog
+
+ENTERO_MAXIMO = 2147483647   # mayor entero de 32 bits con signo (MIPS)
+_RE_ENTERO = re.compile(r"[0-9]+")
+_RE_DECIMAL = re.compile(r"[0-9]+\.[0-9]+")
+
+
+def es_letra(c):
+    """Letra ASCII o guion bajo (los identificadores no admiten acentos ni ñ)."""
+    return c is not None and (("a" <= c <= "z") or ("A" <= c <= "Z") or c == "_")
+
+
+def es_digito(c):
+    return c is not None and "0" <= c <= "9"
+
 
 # Representa un token del lenguaje
 @dataclass
@@ -114,7 +129,7 @@ class Lexer:
             caracter = self.actual()
 
             assert caracter is not None
-            if not (caracter.isalnum() or caracter == "_"):
+            if not (es_letra(caracter) or es_digito(caracter)):
                 break
 
             self.avanzar()
@@ -135,28 +150,36 @@ class Lexer:
         linea = self.linea
         columna = self.columna
 
-        assert self.actual() is not None
-        while self.actual() is not None and self.actual().isdigit(): # type: ignore
-            self.avanzar()
-
-        tipo = "ENTERO"
-
-        # Comprueba si el número tiene decimales
-        if self.actual() == "." and (
-            self.siguiente() is not None
-            and self.siguiente().isdigit() # type: ignore
+        # Se toma todo lo que parece parte de un número (dígitos, letras, puntos)
+        # y después se valida: así '3.', '1.2.3' o '12abc' dan un solo error claro.
+        while self.actual() is not None and (
+            es_letra(self.actual())
+            or es_digito(self.actual())
+            or self.actual() == "."
         ):
-            tipo = "DECIMAL"
             self.avanzar()
-
-            while self.actual() is not None and self.actual().isdigit(): # type: ignore
-                self.avanzar()
 
         valor = self.codigo[inicio:self.posicion]
 
-        self.agregar_token(
-            tipo, valor, linea, columna
-        )
+        if _RE_ENTERO.fullmatch(valor):
+            if int(valor) > ENTERO_MAXIMO:
+                self.errores.agregar(
+                    "léxico", "E-LEX-03", linea, columna,
+                    f"Entero fuera de rango: {valor} "
+                    f"(el máximo es {ENTERO_MAXIMO})"
+                )
+                return
+            tipo = "ENTERO"
+        elif _RE_DECIMAL.fullmatch(valor):
+            tipo = "DECIMAL"
+        else:
+            self.errores.agregar(
+                "léxico", "E-LEX-03", linea, columna,
+                f"Número mal formado: '{valor}'"
+            )
+            return
+
+        self.agregar_token(tipo, valor, linea, columna)
 
     # Analiza cadenas de texto
     def leer_texto(self):
@@ -208,14 +231,20 @@ class Lexer:
                 self.avanzar()
                 continue
 
+            # Ignora comentarios que empiezan con //
+            if caracter == "/" and self.siguiente() == "/":
+                while self.actual() is not None and self.actual() != "\n":
+                    self.avanzar()
+                continue
+
             # Identificadores y palabras reservadas
             assert caracter is not None
-            if caracter.isalpha() or caracter == "_":
+            if es_letra(caracter):
                 self.leer_identificador()
                 continue
 
             # Números
-            if caracter.isdigit():
+            if es_digito(caracter):
                 self.leer_numero()
                 continue
 

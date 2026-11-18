@@ -209,6 +209,9 @@ class Parser:
 
         self.consumir("LLAVE_ABRE")
 
+        if self.comprobar("LLAVE_CIERRA"):
+            self.error("La zona necesita al menos un campo")
+
         campos = []
 
         while not self.comprobar("LLAVE_CIERRA"):
@@ -229,6 +232,9 @@ class Parser:
 
             if not self.comprobar("LLAVE_CIERRA"):
                 self.consumir("COMA")
+
+                if self.comprobar("LLAVE_CIERRA"):
+                    self.error("Se esperaba un campo después de la coma")
 
         self.consumir("LLAVE_CIERRA")
 
@@ -386,7 +392,9 @@ class Parser:
             izquierda = OperacionBinaria(
                 izquierda=izquierda,
                 operador=operador.valor,
-                derecha=derecha
+                derecha=derecha,
+                linea=operador.linea,
+                columna=operador.columna
             )
 
         return izquierda
@@ -403,7 +411,9 @@ class Parser:
             izquierda = OperacionBinaria(
                 izquierda=izquierda,
                 operador=operador.valor,
-                derecha=derecha
+                derecha=derecha,
+                linea=operador.linea,
+                columna=operador.columna
             )
 
         return izquierda
@@ -416,7 +426,9 @@ class Parser:
 
             return OperacionUnaria(
                 operador=operador.valor,
-                operando=self.expresion_no()
+                operando=self.expresion_no(),
+                linea=operador.linea,
+                columna=operador.columna
             )
 
         return self.expresion_relacional()
@@ -440,7 +452,9 @@ class Parser:
             return OperacionBinaria(
                 izquierda=izquierda,
                 operador=self.OPERADORES[operador.tipo],
-                derecha=derecha
+                derecha=derecha,
+                linea=operador.linea,
+                columna=operador.columna
             )
 
         return izquierda
@@ -457,7 +471,9 @@ class Parser:
             izquierda = OperacionBinaria(
                 izquierda=izquierda,
                 operador=self.OPERADORES[operador.tipo],
-                derecha=derecha
+                derecha=derecha,
+                linea=operador.linea,
+                columna=operador.columna
             )
 
         return izquierda
@@ -478,7 +494,9 @@ class Parser:
             izquierda = OperacionBinaria(
                 izquierda=izquierda,
                 operador=self.OPERADORES[operador.tipo],
-                derecha=derecha
+                derecha=derecha,
+                linea=operador.linea,
+                columna=operador.columna
             )
 
         return izquierda
@@ -487,11 +505,13 @@ class Parser:
     def factor(self):
 
         if self.comprobar("RESTA"):
-            self.avanzar()
+            inicio_un = self.avanzar()
 
             return OperacionUnaria(
                 operador="-",
-                operando=self.factor()
+                operando=self.factor(),
+                linea=inicio_un.linea,
+                columna=inicio_un.columna
             )
 
         return self.primario()
