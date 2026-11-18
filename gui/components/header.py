@@ -1,4 +1,3 @@
-
 # =====================================================
 # MILPA IDE - HEADER
 # =====================================================
@@ -7,6 +6,7 @@ import tkinter as tk
 
 from gui.config.colors import COLORS
 from gui.config.fonts import FONTS
+from gui.components.widgets import Boton, rect_redondeado, separador
 
 
 def crear_header(
@@ -21,12 +21,13 @@ def crear_header(
 
     header = tk.Frame(
         parent,
-        bg=COLORS["white"],
-        height=105
+        bg=COLORS["white"]
     )
 
-    header.pack(fill="x")
-    header.pack_propagate(False)
+    header.pack(fill="both", expand=True)
+
+    # Línea inferior sutil en lugar de un borde completo
+    separador(header, color=COLORS["border"], side="bottom", fill="x")
 
     # -----------------------------------------------
     # IDENTIDAD DE MILPA
@@ -37,23 +38,30 @@ def crear_header(
         bg=COLORS["white"]
     )
 
-    logo.pack(side="left", padx=28)
+    logo.pack(side="left", padx=(18, 0))
+
+    _crear_isotipo(logo).pack(side="left")
 
     tk.Label(
         logo,
-        text="◆ Milpa",
+        text="MILPA",
         bg=COLORS["white"],
         fg=COLORS["primary_dark"],
         font=FONTS["logo"]
-    ).pack(side="left")
+    ).pack(side="left", padx=(10, 0))
+
+    separador(
+        logo, orientacion="vertical", color=COLORS["border"],
+        side="left", padx=14
+    )
 
     tk.Label(
         logo,
         text="Programa, diseña y simula tu huerto",
         bg=COLORS["white"],
-        fg="#423B32",
+        fg=COLORS["text_secondary"],
         font=FONTS["subtitle"]
-    ).pack(side="left", padx=18, pady=(15, 0))
+    ).pack(side="left")
 
     # -----------------------------------------------
     # BOTONES
@@ -66,80 +74,76 @@ def crear_header(
 
     acciones.pack(
         side="right",
-        padx=25,
-        pady=20
+        padx=(0, 16)
     )
 
-    _crear_boton(
-        acciones,
-        "▱\nAbrir",
-        on_open
+    _crear_boton(acciones, "↥", "Abrir", on_open)
+    _crear_boton(acciones, "↧", "Guardar", on_save)
+
+    separador(
+        acciones, orientacion="vertical", color=COLORS["border"],
+        side="left", padx=8
     )
 
-    _crear_boton(
-        acciones,
-        "▣\nGuardar",
-        on_save
-    )
+    _crear_boton(acciones, "⌫", "Limpiar", on_clear)
+    _crear_boton(acciones, "▤", "Ejemplos", on_examples)
+    _crear_boton(acciones, "?", "Ayuda", on_help)
 
+    # Acción principal, separada y destacada
     _crear_boton(
-        acciones,
-        "▷\nEjecutar",
-        on_run,
-        principal=True
-    )
-
-    _crear_boton(
-        acciones,
-        "⌫\nLimpiar",
-        on_clear
-    )
-
-    _crear_boton(
-        acciones,
-        "▤\nEjemplos",
-        on_examples
-    )
-
-    _crear_boton(
-        acciones,
-        "? \nAyuda",
-        on_help
-    )
+        acciones, "▶", "Ejecutar", on_run, principal=True
+    ).pack_configure(padx=(12, 0))
 
     return header
 
 
-def _crear_boton(parent, texto, comando, principal=False):
+def _crear_boton(parent, icono, texto, comando, principal=False):
 
-    background = (
-        COLORS["primary"]
-        if principal
-        else COLORS["white"]
-    )
-
-    foreground = (
-        COLORS["white"]
-        if principal
-        else COLORS["text"]
-    )
-
-    boton = tk.Button(
+    boton = Boton(
         parent,
-        text=texto,
-        command=comando,
-        bg=background,
-        fg=foreground,
-        activebackground=COLORS["primary_light"],
-        activeforeground=COLORS["white"],
-        font=FONTS["button"],
-        relief="flat",
-        bd=0,
-        padx=15,
-        pady=7,
-        cursor="hand2"
+        texto=texto,
+        icono=icono,
+        comando=comando,
+        variante="primario" if principal else "secundario",
+        padx=14 if principal else 10
     )
 
-    boton.pack(side="left", padx=3)
+    boton.pack(side="left", padx=1)
 
     return boton
+
+
+def _crear_isotipo(parent, tamaño=30):
+    """Brote verde dibujado en un cuadro redondeado: agricultura + tecnología."""
+
+    lienzo = tk.Canvas(
+        parent,
+        width=tamaño,
+        height=tamaño,
+        bg=COLORS["white"],
+        highlightthickness=0,
+        bd=0
+    )
+
+    rect_redondeado(
+        lienzo, 0, 0, tamaño, tamaño, 8,
+        fill=COLORS["primary"], outline=""
+    )
+
+    centro = tamaño / 2
+    lienzo.create_line(
+        centro, tamaño * 0.78, centro, tamaño * 0.42,
+        fill=COLORS["white"], width=2, capstyle="round"
+    )
+    lienzo.create_oval(
+        centro - tamaño * 0.32, tamaño * 0.30,
+        centro - tamaño * 0.02, tamaño * 0.50,
+        fill=COLORS["white"], outline=""
+    )
+    lienzo.create_oval(
+        centro + tamaño * 0.02, tamaño * 0.20,
+        centro + tamaño * 0.32, tamaño * 0.40,
+        fill="#BFE3CF", outline=""
+    )
+
+    return lienzo

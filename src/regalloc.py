@@ -39,8 +39,23 @@ class AsignadorRegistros:
         """Calcula el primer y último uso de cada temporal."""
 
         posiciones = {}
+        parametros = []
 
         for i, c in enumerate(self.cuadruplos):
+            # Un argumento (PARAM) sigue vivo hasta la llamada que lo usa.
+            if c.operador == "PARAM":
+                parametros.append(c.argumento1)
+            elif c.operador == "CALL":
+                try:
+                    cantidad = int(c.argumento2 or 0)
+                except ValueError:
+                    cantidad = 0
+                usados = parametros[len(parametros) - cantidad:] if cantidad else []
+                del parametros[len(parametros) - len(usados):]
+                for argumento in usados:
+                    if argumento in posiciones:
+                        posiciones[argumento][1] = max(posiciones[argumento][1], i)
+
             # Los argumentos representan usos.
             for argumento in (c.argumento1, c.argumento2):
                 if self.es_temporal(argumento):

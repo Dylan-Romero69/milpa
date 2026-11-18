@@ -15,6 +15,16 @@ from gui.components.editor import CodeEditor
 from gui.components.console import ConsolePanel
 
 from gui.components.statusbar import StatusBar
+from gui.components.widgets import BarraPestanas
+from src.huerto import parcelas_desde_estado, sensor_simulado
+from src.huerto_codigo import (
+    aplicar_huerto_al_codigo, analizar_codigo, parcelas_desde_codigo
+)
+from src.mips_sim import ErrorMIPS, SimuladorMIPS, extraer_estado
+from gui.components.huerto_arte import (
+    AnimacionRiego, CULTIVOS_SUGERIDOS, FONDO_PRADO,
+    dibujar_cama, dibujar_fondo, dibujar_parcela_vacia
+)
 
 # =========================================================
 # MILPA IDE - PALETA VISUAL
@@ -52,7 +62,7 @@ class MilpaIDE:
         self.parcelas = {
             (fila, columna): {
                 "tierra": False, "cultivo": "", "humedad_min": 35,
-                "riego_max": 6, "humedad": 50, "estado": "vacía"
+                "riego_max": 6, "humedad": 50, "estado": "vacía", "zona": ""
             }
             for fila in range(self.huerto_filas)
             for columna in range(self.huerto_columnas)
@@ -60,6 +70,10 @@ class MilpaIDE:
         self.herramienta_huerto = tk.StringVar(master=root, value="tierra")
         self.cantidad_agua = tk.IntVar(master=root, value=15)
         self.parcela_seleccionada = None
+        # Sincronización editor <-> huerto
+        self._codigo_sincronizado = None
+        self._sincronizacion_pendiente = None
+        self._avisos_huerto = []
 
         self.root.title("MILPA | Programa tu huerto")
         self.root.geometry("1500x900")
@@ -78,6 +92,8 @@ class MilpaIDE:
 
     def configurar_estilos(self):
         configurar_estilos()
+        # Las fuentes se eligen según el sistema al configurar los estilos.
+        self.familia_fuente = FONTS["normal"][0]
 
     # =====================================================
     # ESTRUCTURA GENERAL
@@ -88,7 +104,7 @@ class MilpaIDE:
         self.header = tk.Frame(
             self.root,
             bg=C["blanco"],
-            height=105
+            height=58
         )
         self.header.pack(fill="x")
         self.header.pack_propagate(False)
@@ -100,21 +116,23 @@ class MilpaIDE:
 
         self.sidebar = tk.Frame(
             cuerpo,
-            bg="#F0F2E9",
-            width=220
+            bg=COLORS["sidebar"],
+            width=216
         )
         self.sidebar.pack(side="left", fill="y")
         self.sidebar.pack_propagate(False)
 
         self.crear_sidebar()
 
+        tk.Frame(cuerpo, bg=C["borde"], width=1).pack(side="left", fill="y")
+
         contenido = tk.Frame(cuerpo, bg=C["fondo"])
         contenido.pack(
             side="left",
             fill="both",
             expand=True,
-            padx=12,
-            pady=12
+            padx=16,
+            pady=(14, 16)
         )
 
         self.crear_area_trabajo(contenido)
@@ -193,7 +211,7 @@ class MilpaIDE:
     # =====================================================
 
     def crear_area_trabajo(self, padre):
-        self.vistas_principales = ttk.Notebook(padre)
+        self.vistas_principales = ttk.Notebook(padre, style="Plano.TNotebook")
         self.vistas_principales.pack(fill="both", expand=True)
         self.pagina_editor = tk.Frame(self.vistas_principales, bg=C["fondo"])
         self.pagina_ejemplos = tk.Frame(self.vistas_principales, bg=C["fondo"])
@@ -202,11 +220,19 @@ class MilpaIDE:
         self.vistas_principales.add(self.pagina_ejemplos, text="Biblioteca")
         self.vistas_principales.add(self.pagina_simulador, text="Huerto")
 
+        # Pestañas visuales: controlan el mismo Notebook (select/tabs intactos).
+        barra_vistas = tk.Frame(padre, bg=C["fondo"])
+        barra_vistas.pack(fill="x", pady=(0, 12), before=self.vistas_principales)
+        BarraPestanas(
+            barra_vistas, self.vistas_principales, variante="segmentos"
+        ).pack(side="left")
+
         columnas = tk.PanedWindow(
             self.pagina_editor,
             orient="horizontal",
             bg=C["fondo"],
-            sashwidth=6,
+            sashwidth=14,
+            sashrelief="flat",
             bd=0
         )
         columnas.pack(fill="both", expand=True)
@@ -214,7 +240,7 @@ class MilpaIDE:
         izquierda = tk.Frame(columnas, bg=C["fondo"])
         derecha = tk.Frame(columnas, bg=C["fondo"])
 
-        columnas.add(izquierda, minsize=400, width=560)
+        columnas.add(izquierda, minsize=400, width=600)
         columnas.add(derecha, minsize=450)
 
         self.crear_editor(izquierda)
@@ -226,8 +252,10 @@ class MilpaIDE:
         self.crear_panel_huerto(self.pagina_simulador)
 
     def crear_panel_huerto(self, padre):
+        panel = COLORS["panel"]
+
         encabezado = tk.Frame(padre, bg=C["fondo"])
-        encabezado.pack(fill="x", padx=14, pady=(12, 6))
+        encabezado.pack(fill="x", pady=(0, 4))
         tk.Label(
             encabezado, text="Diseñador y simulador de huerto",
             bg=C["fondo"], fg=C["texto"], font=FONTS["title"]
@@ -238,37 +266,43 @@ class MilpaIDE:
         ).pack(side="right")
         tk.Label(
             padre,
-            text="Selecciona una herramienta y pulsa una parcela. Verde: saludable; amarillo: seca; rojo: dañada. El código MILPA se sincroniza con el editor.",
-            bg=C["fondo"], fg=C["gris"], font=FONTS["normal"], anchor="w"
-        ).pack(fill="x", padx=15, pady=(0, 8))
+            text="Selecciona una herramienta y pulsa una parcela. Verde: saludable; amarillo: seca; rojo: dañada. El huerto y el editor se sincronizan en tiempo real; para elegir la parcela desde el código agrega fila y columna a la zona (por ejemplo fila: 2, columna: 3).",
+            bg=C["fondo"], fg=C["gris"], font=FONTS["small"], anchor="w",
+            justify="left", wraplength=900
+        ).pack(fill="x", pady=(0, 12))
 
-        cuerpo = tk.Frame(padre, bg=C["blanco"], highlightbackground=C["borde"], highlightthickness=1)
-        cuerpo.pack(fill="both", expand=True, padx=14, pady=(0, 14))
-        lienzo_panel = tk.Frame(cuerpo, bg=C["blanco"])
-        lienzo_panel.pack(side="left", fill="both", expand=True, padx=12, pady=12)
-        herramientas = tk.Frame(cuerpo, bg=C["verde_suave"], width=280)
-        herramientas.pack(side="right", fill="y", padx=(0, 12), pady=12)
+        cuerpo = tk.Frame(
+            padre, bg=C["blanco"], highlightbackground=C["borde"],
+            highlightcolor=C["borde"], highlightthickness=1
+        )
+        cuerpo.pack(fill="both", expand=True)
+        herramientas = tk.Frame(cuerpo, bg=panel, width=290)
+        herramientas.pack(side="right", fill="y")
         herramientas.pack_propagate(False)
+        tk.Frame(cuerpo, bg=COLORS["border_soft"], width=1).pack(side="right", fill="y")
+        lienzo_panel = tk.Frame(cuerpo, bg=C["blanco"])
+        lienzo_panel.pack(side="left", fill="both", expand=True, padx=16, pady=16)
 
         barra = tk.Frame(lienzo_panel, bg=C["blanco"])
-        barra.pack(fill="x", pady=(0, 8))
+        barra.pack(fill="x", pady=(0, 12))
+        tk.Label(
+            barra, text="HERRAMIENTA", bg=C["blanco"],
+            fg=COLORS["text_muted"], font=FONTS["label"]
+        ).pack(side="left", padx=(0, 10))
         for modo, etiqueta, icono in (
             ("tierra", "Tierra", "▧"),
             ("cultivo", "Cultivo", "♧"),
             ("agua", "Agua", "≈"),
             ("borrar", "Borrar", "⌫"),
         ):
-            tk.Radiobutton(
+            ttk.Radiobutton(
                 barra, text="{}  {}".format(icono, etiqueta),
                 variable=self.herramienta_huerto, value=modo,
-                indicatoron=False, relief="flat", padx=11, pady=7,
-                bg=C["blanco"], fg=C["texto"], selectcolor=C["verde_claro"],
-                activebackground=C["verde_claro"], font=FONTS["button"],
-                cursor="hand2"
-            ).pack(side="left", padx=(0, 5))
+                style="Segmento.Toolbutton", cursor="hand2"
+            ).pack(side="left", padx=(0, 4))
 
         self.canvas_huerto = tk.Canvas(
-            lienzo_panel, bg="#E7EAD9", highlightthickness=0,
+            lienzo_panel, bg=FONDO_PRADO, highlightthickness=0,
             height=520, cursor="crosshair"
         )
         self.canvas_huerto.pack(fill="both", expand=True)
@@ -276,48 +310,54 @@ class MilpaIDE:
         self.canvas_huerto.bind("<Button-1>", self.clic_parcela)
 
         tk.Label(
-            herramientas, text="PARCELA SELECCIONADA", bg=C["verde_suave"],
-            fg=C["verde"], font=FONTS["small"]
-        ).pack(anchor="w", padx=14, pady=(16, 5))
+            herramientas, text="PARCELA SELECCIONADA", bg=panel,
+            fg=COLORS["text_muted"], font=FONTS["label"]
+        ).pack(anchor="w", padx=18, pady=(18, 6))
         self.etiqueta_parcela = tk.Label(
-            herramientas, text="Ninguna", bg=C["verde_suave"],
-            fg=C["texto"], font=FONTS["heading"]
+            herramientas, text="Ninguna", bg=panel,
+            fg=C["texto"], font=FONTS["title"]
         )
-        self.etiqueta_parcela.pack(anchor="w", padx=14, pady=(0, 14))
+        self.etiqueta_parcela.pack(anchor="w", padx=18, pady=(0, 10))
         self.detalle_parcela = tk.Label(
             herramientas, text="Elige una parcela para ver su estado.",
-            justify="left", anchor="w", wraplength=245,
-            bg=C["verde_suave"], fg=C["texto"], font=FONTS["normal"]
+            justify="left", anchor="w", wraplength=250,
+            bg=panel, fg=C["gris"], font=FONTS["small"]
         )
-        self.detalle_parcela.pack(fill="x", padx=14, pady=(0, 12))
+        self.detalle_parcela.pack(fill="x", padx=18, pady=(0, 14))
         ttk.Button(
             herramientas, text="Configurar cultivo",
-            command=self.configurar_parcela_seleccionada
-        ).pack(fill="x", padx=14, pady=(0, 16))
+            command=self.configurar_parcela_seleccionada,
+            style="Accent.TButton"
+        ).pack(fill="x", padx=18, pady=(0, 18))
+        tk.Frame(herramientas, bg=COLORS["border_soft"], height=1).pack(
+            fill="x", padx=18, pady=(0, 16)
+        )
         tk.Label(
-            herramientas, text="Agua por riego", bg=C["verde_suave"],
-            fg=C["texto"], font=FONTS["normal"]
-        ).pack(anchor="w", padx=14)
+            herramientas, text="AGUA POR RIEGO", bg=panel,
+            fg=COLORS["text_muted"], font=FONTS["label"]
+        ).pack(anchor="w", padx=18)
         tk.Scale(
             herramientas, from_=5, to=50, resolution=5, orient="horizontal",
-            variable=self.cantidad_agua, bg=C["verde_suave"],
-            highlightthickness=0, troughcolor=C["blanco"], showvalue=True
-        ).pack(fill="x", padx=10)
+            variable=self.cantidad_agua, bg=panel, fg=C["texto"],
+            font=FONTS["tiny"], highlightthickness=0, bd=0,
+            troughcolor=COLORS["track"], activebackground=COLORS["primary_light"],
+            sliderrelief="flat", sliderlength=18, width=8, showvalue=True
+        ).pack(fill="x", padx=14, pady=(0, 6))
         self.boton_regar = ttk.Button(
             herramientas, text="Añadir agua a parcela",
             command=self.regar_parcela_seleccionada
         )
-        self.boton_regar.pack(fill="x", padx=14, pady=(3, 14))
+        self.boton_regar.pack(fill="x", padx=18, pady=(0, 8))
         ttk.Button(
             herramientas, text="Reiniciar huerto",
             command=self.reiniciar_huerto
-        ).pack(fill="x", padx=14, pady=(0, 14))
+        ).pack(fill="x", padx=18, pady=(0, 16))
         tk.Label(
             herramientas,
             text="Las plantas se secan si la humedad baja de su mínimo y se dañan si el riego excede el límite.",
-            justify="left", wraplength=245, bg=C["verde_suave"],
-            fg=C["gris"], font=FONTS["small"]
-        ).pack(fill="x", padx=14, pady=(0, 14))
+            justify="left", wraplength=250, bg=panel,
+            fg=C["gris"], font=FONTS["tiny"]
+        ).pack(side="bottom", fill="x", padx=18, pady=(0, 18))
         self.dibujar_huerto()
         self.root.after(3000, self.actualizar_huerto_en_tiempo_real)
 
@@ -333,70 +373,42 @@ class MilpaIDE:
         if ancho < 30 or alto < 30:
             return
         canvas.delete("all")
-        margen, separacion = 18, 10
-        celda = min(
-            (ancho - 2 * margen - (self.huerto_columnas - 1) * separacion) / self.huerto_columnas,
-            (alto - 2 * margen - (self.huerto_filas - 1) * separacion) / self.huerto_filas
-        )
-        celda = max(55, celda)
-        ancho_grid = self.huerto_columnas * celda + (self.huerto_columnas - 1) * separacion
-        alto_grid = self.huerto_filas * celda + (self.huerto_filas - 1) * separacion
+        dibujar_fondo(canvas, ancho, alto)
+        margen, separacion = 18, 14
+        # Camas rectangulares: aprovechan el ancho sin pasar de 1.5:1.
+        celda_alto = max(55, (alto - 2 * margen - (self.huerto_filas - 1) * separacion) / self.huerto_filas)
+        celda_ancho = max(55, (ancho - 2 * margen - (self.huerto_columnas - 1) * separacion) / self.huerto_columnas)
+        celda_ancho = min(celda_ancho, celda_alto * 1.5)
+        celda_alto = min(celda_alto, celda_ancho)
+        ancho_grid = self.huerto_columnas * celda_ancho + (self.huerto_columnas - 1) * separacion
+        alto_grid = self.huerto_filas * celda_alto + (self.huerto_filas - 1) * separacion
         x0 = max(margen, (ancho - ancho_grid) / 2)
         y0 = max(margen, (alto - alto_grid) / 2)
         self.huerto_celdas = {}
         for fila in range(self.huerto_filas):
             for columna in range(self.huerto_columnas):
-                x1 = x0 + columna * (celda + separacion)
-                y1 = y0 + fila * (celda + separacion)
-                x2, y2 = x1 + celda, y1 + celda
+                x1 = x0 + columna * (celda_ancho + separacion)
+                y1 = y0 + fila * (celda_alto + separacion)
+                x2, y2 = x1 + celda_ancho, y1 + celda_alto
                 parcela = self.parcelas[(fila, columna)]
                 seleccionado = self.parcela_seleccionada == (fila, columna)
                 self.huerto_celdas[(fila, columna)] = (x1, y1, x2, y2)
-                fondo = "#805638" if parcela["tierra"] else "#D6DCCB"
-                canvas.create_rectangle(
-                    x1, y1, x2, y2, fill=fondo,
-                    outline=C["verde"] if seleccionado else "#FFFFFF",
-                    width=4 if seleccionado else 2
-                )
+                etiqueta = "{}:{}".format(fila + 1, columna + 1)
                 if parcela["tierra"]:
-                    canvas.create_rectangle(
-                        x1 + 7, y1 + 7, x2 - 7, y2 - 7,
-                        fill="#9A6B45", outline="#71472F", width=1
+                    dibujar_cama(
+                        canvas, x1, y1, x2, y2, parcela, etiqueta,
+                        seleccionado, semilla=fila * 31 + columna
                     )
-                    if parcela["cultivo"]:
-                        estado = parcela["estado"]
-                        color = {
-                            "saludable": "#2E8B45", "seca": "#D0A331",
-                            "dañada": "#9D4036"
-                        }.get(estado, "#2E8B45")
-                        cx, cy = (x1 + x2) / 2, y1 + celda * 0.48
-                        canvas.create_line(cx, cy + 16, cx, cy - 10, fill="#3E6835", width=4)
-                        canvas.create_oval(cx - 21, cy - 14, cx - 3, cy - 3, fill=color, outline="")
-                        canvas.create_oval(cx + 3, cy - 22, cx + 21, cy - 11, fill=color, outline="")
-                        canvas.create_oval(cx - 5, cy - 31, cx + 5, cy - 20, fill=color, outline="")
-                        canvas.create_text(
-                            cx, y2 - 23, text=parcela["cultivo"][:12],
-                            fill="#FFFFFF", font=FONTS["tiny"]
-                        )
-                        canvas.create_oval(
-                            x2 - 17, y1 + 9, x2 - 10, y1 + 16,
-                            fill="#D8F0FF", outline=""
-                        )
-                    else:
-                        canvas.create_text(
-                            (x1 + x2) / 2, (y1 + y2) / 2,
-                            text="Tierra", fill="#F7E5C5", font=FONTS["small"]
-                        )
-                canvas.create_text(
-                    x1 + 15, y1 + 14, text="{}:{}".format(fila + 1, columna + 1),
-                    fill="#FFFFFF" if parcela["tierra"] else C["gris"],
-                    font=FONTS["tiny"]
-                )
-                if parcela["tierra"]:
-                    canvas.create_text(
-                        x2 - 22, y2 - 13, text="{}%".format(parcela["humedad"]),
-                        fill="#FFFFFF", font=FONTS["tiny"]
+                else:
+                    dibujar_parcela_vacia(
+                        canvas, x1, y1, x2, y2, etiqueta, seleccionado
                     )
+
+    def animar_riego(self, posicion):
+        AnimacionRiego(
+            self.canvas_huerto,
+            lambda: getattr(self, "huerto_celdas", {}).get(posicion)
+        )
 
     def clic_parcela(self, evento):
         for posicion, (x1, y1, x2, y2) in getattr(self, "huerto_celdas", {}).items():
@@ -418,6 +430,7 @@ class MilpaIDE:
                         parcela["humedad"] = min(100, parcela["humedad"] + self.cantidad_agua.get())
                         self.actualizar_estado_parcela(parcela)
                         self.sincronizar_codigo_huerto()
+                        self.animar_riego(posicion)
                     else:
                         self.mensaje("Añade tierra antes de regar la parcela.", "warning")
                 elif modo == "borrar":
@@ -486,7 +499,7 @@ class MilpaIDE:
         tk.Label(
             ventana, text="Cultivo y requerimientos",
             bg=C["blanco"], fg=C["texto"], font=FONTS["heading"]
-        ).grid(row=0, column=0, columnspan=2, sticky="w", padx=18, pady=(16, 12))
+        ).grid(row=0, column=0, columnspan=2, sticky="w", padx=22, pady=(20, 14))
         campos = (
             ("Cultivo", tk.StringVar(value=parcela["cultivo"] or "tomate")),
             ("Humedad mínima (%)", tk.StringVar(value=str(parcela["humedad_min"]))),
@@ -497,15 +510,21 @@ class MilpaIDE:
             tk.Label(
                 ventana, text=etiqueta, bg=C["blanco"],
                 fg=C["gris"], font=FONTS["normal"]
-            ).grid(row=indice, column=0, sticky="w", padx=18, pady=5)
-            entrada = ttk.Entry(ventana, textvariable=variable, width=24)
-            entrada.grid(row=indice, column=1, padx=(8, 18), pady=5)
+            ).grid(row=indice, column=0, sticky="w", padx=(22, 8), pady=6)
+            if etiqueta == "Cultivo":
+                # Editable: se puede escribir cualquier cultivo o elegir uno ilustrado.
+                entrada = ttk.Combobox(
+                    ventana, textvariable=variable, values=CULTIVOS_SUGERIDOS, width=22
+                )
+            else:
+                entrada = ttk.Entry(ventana, textvariable=variable, width=24)
+            entrada.grid(row=indice, column=1, padx=(8, 22), pady=6)
             entradas[etiqueta] = variable
         tk.Label(
             ventana,
             text="El cultivo se daña al superar el mínimo + riego máximo × 5.",
             bg=C["blanco"], fg=C["gris"], font=FONTS["small"]
-        ).grid(row=4, column=0, columnspan=2, sticky="w", padx=18, pady=(8, 3))
+        ).grid(row=4, column=0, columnspan=2, sticky="w", padx=22, pady=(10, 0))
 
         def centrar_modal():
             ventana.update_idletasks()
@@ -539,9 +558,9 @@ class MilpaIDE:
             self.sincronizar_codigo_huerto()
             ventana.destroy()
 
-        ttk.Button(ventana, text="Aplicar", command=aplicar).grid(
-            row=5, column=1, sticky="e", padx=18, pady=(10, 16)
-        )
+        ttk.Button(
+            ventana, text="Aplicar", command=aplicar, style="Accent.TButton"
+        ).grid(row=5, column=1, sticky="e", padx=22, pady=(14, 20))
         ventana.after(0, centrar_modal)
 
     def regar_parcela_seleccionada(self):
@@ -557,6 +576,7 @@ class MilpaIDE:
         self.actualizar_detalle_parcela()
         self.dibujar_huerto()
         self.sincronizar_codigo_huerto()
+        self.animar_riego(self.parcela_seleccionada)
 
     def reiniciar_huerto(self):
         for parcela in self.parcelas.values():
@@ -571,31 +591,51 @@ class MilpaIDE:
         self.mensaje("Huerto reiniciado.", "exito")
 
     def sincronizar_codigo_huerto(self):
-        lineas = []
-        for (fila, columna), parcela in self.parcelas.items():
-            if not parcela["tierra"]:
-                continue
-            nombre = "parcela_{}_{}".format(fila + 1, columna + 1)
-            cultivo = (parcela["cultivo"] or "sin cultivo").replace('"', "")
-            lineas.extend([
-                "zona {} {{".format(nombre),
-                '    cultivo: "{}",'.format(cultivo),
-                "    humedad_min: {},".format(parcela["humedad_min"]),
-                "    riego_max: {}".format(parcela["riego_max"]),
-                "}",
-                "entero humedad_actual_{}_{} = {}".format(
-                    fila + 1, columna + 1, parcela["humedad"]
-                ),
-                'texto estado_cultivo_{}_{} = "{}"'.format(
-                    fila + 1, columna + 1, parcela["estado"]
-                ),
-                ""
-            ])
-        if not lineas:
-            lineas = ['registrar("Prepara tierra y añade cultivos en el simulador")']
-        self.editor_component.establecer_codigo("\n".join(lineas).rstrip() + "\n")
-        self.archivo_actual = None
+        """Huerto -> editor: solo cambia las zonas afectadas y sus variables."""
+        actual = self.editor_component.obtener_codigo()
+        nuevo = aplicar_huerto_al_codigo(
+            actual, self.parcelas, self.huerto_filas, self.huerto_columnas
+        )
+        if nuevo != actual:
+            self.editor_component.reemplazar_codigo(nuevo)
+        self._codigo_sincronizado = self.editor_component.obtener_codigo()
         self.statusbar.actualizar_estado("Código del huerto sincronizado con el editor")
+
+    def editor_modificado(self, _evento=None):
+        """Espera a que se deje de escribir un momento antes de actualizar el huerto."""
+        if not self.editor.edit_modified():
+            return
+        self.editor.edit_modified(False)
+        if self._sincronizacion_pendiente is not None:
+            self.root.after_cancel(self._sincronizacion_pendiente)
+        self._sincronizacion_pendiente = self.root.after(
+            350, self.sincronizar_huerto_desde_codigo
+        )
+
+    def sincronizar_huerto_desde_codigo(self):
+        """Editor -> huerto: las zonas del código definen las parcelas."""
+        self._sincronizacion_pendiente = None
+        codigo = self.editor_component.obtener_codigo()
+        if codigo == self._codigo_sincronizado:
+            return
+        self._codigo_sincronizado = codigo
+
+        parcelas, avisos = parcelas_desde_codigo(
+            analizar_codigo(codigo), self.huerto_filas,
+            self.huerto_columnas, anteriores=self.parcelas
+        )
+        for posicion, parcela in parcelas.items():
+            self.parcelas[posicion].update(parcela)
+
+        self.actualizar_detalle_parcela()
+        self.dibujar_huerto()
+
+        if avisos != self._avisos_huerto:
+            self._avisos_huerto = avisos
+            for aviso in avisos:
+                self.mensaje(aviso, "warning")
+        if avisos:
+            self.statusbar.actualizar_estado(avisos[0])
 
     def actualizar_huerto_en_tiempo_real(self):
         cambio = False
@@ -620,11 +660,14 @@ class MilpaIDE:
         tk.Label(
             tarjeta,
             text="Explora las carpetas y abre un archivo con doble clic para cargarlo en el editor.",
-            bg=C["blanco"], fg=C["gris"], font=FONTS["normal"], anchor="w"
-        ).pack(fill="x", padx=14, pady=(10, 6))
+            bg=C["blanco"], fg=C["gris"], font=FONTS["small"], anchor="w"
+        ).pack(fill="x", padx=16, pady=(12, 10))
 
-        contenedor = tk.Frame(tarjeta, bg=C["blanco"])
-        contenedor.pack(fill="both", expand=True, padx=12, pady=(0, 12))
+        contenedor = tk.Frame(
+            tarjeta, bg=C["blanco"], highlightbackground=COLORS["border_soft"],
+            highlightcolor=COLORS["border_soft"], highlightthickness=1
+        )
+        contenedor.pack(fill="both", expand=True, padx=16, pady=(0, 16))
         self.arbol_ejemplos = ttk.Treeview(
             contenedor, columns=("descripcion",), show="tree headings"
         )
@@ -708,12 +751,12 @@ class MilpaIDE:
         )
         tarjeta.pack(fill="both", expand=True)
 
-        self.notebook_fases = ttk.Notebook(tarjeta)
+        self.notebook_fases = ttk.Notebook(tarjeta, style="Tarjeta.TNotebook")
         self.notebook_fases.pack(
             fill="both",
             expand=True,
-            padx=7,
-            pady=7
+            padx=2,
+            pady=(0, 2)
         )
 
         self.resultados = {}
@@ -753,10 +796,16 @@ class MilpaIDE:
                     marco,
                     bg=C["blanco"],
                     fg=C["codigo"],
-                    font=("Cascadia Code", 10),
+                    font=FONTS["console"],
                     relief="flat",
-                    padx=12,
-                    pady=12,
+                    bd=0,
+                    highlightthickness=0,
+                    selectbackground=COLORS["selection"],
+                    inactiveselectbackground=COLORS["green_light"],
+                    spacing1=2,
+                    spacing3=2,
+                    padx=18,
+                    pady=14,
                     wrap="none"
                 )
 
@@ -775,6 +824,15 @@ class MilpaIDE:
 
                 self.resultados[fase] = texto
 
+        # Pestañas compactas tipo chip que se reparten en filas si no caben.
+        barra_fases = BarraPestanas(
+            tarjeta, self.notebook_fases, variante="chips", bg=C["blanco"]
+        )
+        barra_fases.pack(fill="x", padx=14, pady=(12, 10), before=self.notebook_fases)
+        tk.Frame(tarjeta, bg=COLORS["border_soft"], height=1).pack(
+            fill="x", before=self.notebook_fases
+        )
+
 
     def crear_tabla_lexica(self, padre):
 
@@ -785,17 +843,26 @@ class MilpaIDE:
         contenedor.pack(
             fill="both",
             expand=True,
-            padx=10,
-            pady=10
+            padx=16,
+            pady=14
         )
 
         tk.Label(
             contenedor,
             text="Tabla de tokens generados",
             bg=C["blanco"],
-            fg=C["verde"],
-            font=("Aptos", 12, "bold")
+            fg=C["texto"],
+            font=FONTS["heading"]
         ).pack(anchor="w", pady=(0, 10))
+
+        marco_tabla = tk.Frame(
+            contenedor,
+            bg=C["blanco"],
+            highlightbackground=COLORS["border_soft"],
+            highlightcolor=COLORS["border_soft"],
+            highlightthickness=1
+        )
+        marco_tabla.pack(fill="both", expand=True)
 
         columnas = (
             "numero",
@@ -806,7 +873,7 @@ class MilpaIDE:
         )
 
         tabla = ttk.Treeview(
-            contenedor,
+            marco_tabla,
             columns=columnas,
             show="headings"
         )
@@ -837,8 +904,14 @@ class MilpaIDE:
             tabla.column(
                 columna,
                 width=anchos[columna],
-                anchor="center"
+                anchor="w" if columna in ("tipo", "lexema") else "center"
             )
+
+        scroll_tabla = ttk.Scrollbar(
+            marco_tabla, orient="vertical", command=tabla.yview
+        )
+        tabla.configure(yscrollcommand=scroll_tabla.set)
+        scroll_tabla.pack(side="right", fill="y", padx=(0, 2), pady=2)
 
         tabla.pack(
             fill="both",
@@ -896,25 +969,41 @@ class MilpaIDE:
             padre,
             bg=C["blanco"],
             highlightbackground=C["borde"],
+            highlightcolor=C["borde"],
             highlightthickness=1
         )
 
         encabezado = tk.Frame(
             contenedor,
-            bg=C["verde_claro"],
-            height=43
+            bg=C["blanco"],
+            height=42
         )
         encabezado.pack(fill="x")
         encabezado.pack_propagate(False)
 
+        if icono:
+            tk.Label(
+                encabezado,
+                text=icono,
+                bg=C["blanco"],
+                fg=C["verde"],
+                font=FONTS["icon"]
+            ).pack(side="left", padx=(16, 8))
+
         tk.Label(
             encabezado,
-            text=f"  {icono}  {titulo}",
-            bg=C["verde_claro"],
+            text=titulo,
+            bg=C["blanco"],
             fg=C["texto"],
-            font=("Aptos", 12, "bold"),
+            font=FONTS["heading"],
             anchor="w"
-        ).pack(fill="both", padx=8)
+        ).pack(side="left", padx=(0 if icono else 16, 0))
+
+        tk.Frame(
+            contenedor,
+            bg=COLORS["border_soft"],
+            height=1
+        ).pack(fill="x")
 
         return contenedor
 
@@ -927,10 +1016,11 @@ class MilpaIDE:
         self.editor_component.frame.pack(
             fill="both",
             expand=True,
-            pady=(0, 10)
+            pady=(0, 14)
         )
         # Referencia compatible con el código anterior
         self.editor = self.editor_component.text
+        self.editor.bind("<<Modified>>", self.editor_modificado, add="+")
 
     def actualizar_lineas(self):
         self.editor_component.actualizar_lineas()
@@ -947,7 +1037,7 @@ class MilpaIDE:
 
         self.console_component.frame.pack(
             fill="both",
-            expand=True
+            expand=False
         )
 
         # Referencia compatible con el código anterior
@@ -988,7 +1078,9 @@ class MilpaIDE:
 
         ruta = filedialog.askopenfilename(
             filetypes=[
+                ("Programas MILPA o MIPS", "*.milpa *.asm"),
                 ("Programas MILPA", "*.milpa"),
+                ("Código máquina MIPS", "*.asm"),
                 ("Todos los archivos", "*.*")
             ]
         )
@@ -998,14 +1090,90 @@ class MilpaIDE:
 
         try:
             contenido = Path(ruta).read_text(encoding="utf-8")
-
-            self.editor_component.establecer_codigo(contenido)
-            self.archivo_actual = Path(ruta)
-            self.vistas_principales.select(self.pagina_editor)
-            self.mensaje(f"Archivo abierto: {ruta}", "exito")
-
-        except OSError as error:
+        except (OSError, UnicodeDecodeError) as error:
             messagebox.showerror("Error", str(error))
+            return
+
+        if Path(ruta).suffix.lower() == ".asm":
+            self.cargar_asm(Path(ruta), contenido)
+            return
+
+        self.editor_component.establecer_codigo(contenido)
+        self.archivo_actual = Path(ruta)
+        self.vistas_principales.select(self.pagina_editor)
+        self.mensaje(f"Archivo abierto: {ruta}", "exito")
+        # El huerto se arma solo: el editor avisa del cambio (editor_modificado).
+
+    # =====================================================
+    # CARGA DE CÓDIGO MÁQUINA (.asm)
+    # =====================================================
+
+    def cargar_asm(self, ruta, contenido):
+        """Lee un .asm completo, lo ejecuta y reconstruye el huerto."""
+        self.limpiar_resultados()
+        self.mostrar_texto_fase("MIPS", contenido)
+        self.mensaje(f"Código máquina abierto: {ruta}", "exito")
+
+        if not self.cargar_huerto_desde_mips(contenido, ruta.name, mostrar_codigo=True):
+            self.vistas_principales.select(self.pagina_editor)
+            self.seleccionar_fase("MIPS")
+            return
+
+        self.archivo_actual = None
+        self.statusbar.actualizar_estado(f"Huerto generado desde {ruta.name}")
+
+    def cargar_huerto_desde_mips(self, asm, nombre, mostrar_codigo):
+        """
+        Ensambla y ejecuta el MIPS, lee zonas y variables de la memoria final
+        y las convierte en parcelas. Devuelve True si el huerto cambió.
+        mostrar_codigo=True escribe en el editor el código MILPA del huerto.
+        """
+        try:
+            simulacion = SimuladorMIPS(asm, entrada=sensor_simulado(self.parcelas)).ejecutar()
+        except ErrorMIPS as error:
+            self.mensaje(f"No se pudo ensamblar {nombre}: {error}", "error")
+            messagebox.showerror("Código MIPS inválido", f"{nombre}\n\n{error}")
+            return False
+
+        salida = simulacion.texto_salida().rstrip()
+        resumen = "Ejecución de {} ({} instrucciones)\n\n{}".format(
+            nombre, simulacion.pasos, salida or "(el programa no imprimió nada)"
+        )
+        if simulacion.error:
+            resumen += f"\n\nError de ejecución: {simulacion.error}"
+            self.mensaje(f"Error al ejecutar {nombre}: {simulacion.error}", "error")
+        self.mostrar_texto_fase("Simulador", resumen)
+        for linea in salida.splitlines()[:40]:
+            self.registrar(linea)
+
+        estado = extraer_estado(simulacion)
+        if not estado["zonas"]:
+            self.mensaje(f"{nombre} no declara zonas: el huerto no cambió.", "warning")
+            return False
+
+        parcelas, avisos = parcelas_desde_estado(
+            estado, self.huerto_filas, self.huerto_columnas
+        )
+        for posicion, parcela in parcelas.items():
+            self.parcelas[posicion].update(parcela)
+        self.parcela_seleccionada = None
+
+        self.actualizar_detalle_parcela()
+        if mostrar_codigo:
+            # El editor pasa a tener solo el código MILPA de este huerto.
+            self.editor_component.establecer_codigo("")
+            self.sincronizar_codigo_huerto()
+            self.mostrar_simulador()
+        else:
+            self.dibujar_huerto()
+        colocadas = sum(1 for parcela in parcelas.values() if parcela["tierra"])
+        self.mensaje(
+            "Huerto generado desde {}: {} zona(s).".format(nombre, colocadas),
+            "exito"
+        )
+        for aviso in avisos:
+            self.mensaje(aviso, "warning")
+        return True
 
     def guardar(self):
 
@@ -1050,7 +1218,7 @@ class MilpaIDE:
 
         ejemplo = (
             'zona huerto_norte {\n'
-            '    cultivo: "jitomate"\n'
+            '    cultivo: "jitomate",\n'
             '    humedad_min: 40.0\n'
             '}\n'
             '\n'
@@ -1060,7 +1228,7 @@ class MilpaIDE:
             'entero limite = 80\n'
             '\n'
             'mientras (humedad < limite) {\n'
-            '    regar(1)\n'
+            '    regar(huerto_norte, 1)\n'
             '    humedad = humedad + 5\n'
             '    litros_total = litros_total + 1.5\n'
             '}\n'
@@ -1182,7 +1350,7 @@ class MilpaIDE:
                 )
             )
 
-            generador_mips = GeneradorMIPS(optimizados, asignador)
+            generador_mips = GeneradorMIPS(optimizados, asignador, generador.tipos)
             ensamblador = generador_mips.generar()
             self.mostrar_texto_fase("MIPS", ensamblador)
             ruta_salida = (
@@ -1242,11 +1410,11 @@ class MilpaIDE:
         tk.Label(
             ventana, text="Preferencias de MILPA",
             bg=C["blanco"], fg=C["texto"], font=FONTS["heading"]
-        ).pack(anchor="w", padx=22, pady=(20, 12))
+        ).pack(anchor="w", padx=24, pady=(22, 14))
         tk.Label(
             ventana, text="Familia tipográfica",
             bg=C["blanco"], fg=C["gris"], font=FONTS["normal"]
-        ).pack(anchor="w", padx=22)
+        ).pack(anchor="w", padx=24)
         fuentes_instaladas = sorted(set(tkfont.families(self.root)))
         preferidas = [
             "Aptos", "Aptos Display", "Segoe UI", "Arial",
@@ -1259,20 +1427,20 @@ class MilpaIDE:
             ventana, textvariable=familia, values=opciones_fuente,
             state="readonly", width=34
         )
-        selector.pack(fill="x", padx=22, pady=(5, 12))
+        selector.pack(fill="x", padx=24, pady=(6, 14))
         tk.Label(
             ventana, text="Tamaño de letra",
             bg=C["blanco"], fg=C["gris"], font=FONTS["normal"]
-        ).pack(anchor="w", padx=22)
+        ).pack(anchor="w", padx=24)
         tamaño = tk.IntVar(value=self.tamaño_fuente)
         ttk.Spinbox(
             ventana, from_=8, to=24, textvariable=tamaño, width=8
-        ).pack(anchor="w", padx=22, pady=(5, 12))
+        ).pack(anchor="w", padx=24, pady=(6, 14))
         muestra = tk.Label(
             ventana, text="MILPA  ·  Cultivo saludable",
             bg=C["blanco"], fg=C["verde"], font=(familia.get(), 13, "bold")
         )
-        muestra.pack(fill="x", padx=22, pady=(0, 10))
+        muestra.pack(fill="x", padx=24, pady=(0, 12))
         selector.bind(
             "<<ComboboxSelected>>",
             lambda _e: muestra.configure(font=(familia.get(), 13, "bold"))
@@ -1310,9 +1478,9 @@ class MilpaIDE:
             ventana.destroy()
             self.mensaje("Tipografía actualizada.", "exito")
 
-        ttk.Button(ventana, text="Aplicar", command=aplicar).pack(
-            anchor="e", padx=22, pady=(0, 20)
-        )
+        ttk.Button(
+            ventana, text="Aplicar", command=aplicar, style="Accent.TButton"
+        ).pack(anchor="e", padx=24, pady=(4, 22))
         ventana.after(0, centrar_modal)
 
     def aplicar_fuente_a_widget(self, widget, familia, tamaño):
@@ -1363,6 +1531,13 @@ class MilpaIDE:
 # =========================================================
 
 def main():
+
+    # Windows: pedir escalado nítido en pantallas HiDPI (macOS ya lo hace solo).
+    try:
+        import ctypes
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)
+    except (AttributeError, OSError):
+        pass
 
     root = tk.Tk()
     MilpaIDE(root)

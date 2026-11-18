@@ -1,0 +1,23 @@
+zona parcela_1_1 {
+    cultivo: "calabacita",
+    humedad_min: 35,
+    riego_max: 6
+}
+entero humedad_actual_1_1 = 19
+texto estado_cultivo_1_1 = "seca"
+
+zona parcela_1_2 {
+    cultivo: "zanahoria",
+    humedad_min: 35,
+    riego_max: 6
+}
+entero humedad_actual_1_2 = 51
+texto estado_cultivo_1_2 = "saludable"
+
+zona parcela_1_3 {
+    cultivo: "tomate",
+    humedad_min: 10,
+    riego_max: 2
+}
+entero humedad_actual_1_3 = 6
+texto estado_cultivo_1_3 = "seca"

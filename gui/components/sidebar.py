@@ -1,4 +1,3 @@
-
 # =====================================================
 # MILPA IDE - SIDEBAR
 # =====================================================
@@ -7,14 +6,15 @@ import tkinter as tk
 
 from gui.config.colors import COLORS
 from gui.config.fonts import FONTS
+from gui.components.widgets import ItemNavegacion
 
 
 OPCIONES = [
     ("⌂", "Inicio"),
-    ("＋", "Nuevo programa"),
-    ("▧", "Ejemplos"),
-    ("◉", "Simulador"),
-    ("⌘", "Configuración"),
+    ("+", "Nuevo programa"),
+    ("▤", "Ejemplos"),
+    ("❀", "Simulador"),
+    ("⚙", "Configuración"),
 ]
 
 
@@ -28,7 +28,7 @@ class Sidebar:
         self.frame = tk.Frame(
             parent,
             bg=COLORS["sidebar"],
-            width=220
+            width=216
         )
 
         self.frame.pack(side="left", fill="y")
@@ -44,50 +44,50 @@ class Sidebar:
             self.frame,
             text="ESPACIO DE TRABAJO",
             bg=COLORS["sidebar"],
-            fg=COLORS["text_secondary"],
-            font=("Aptos", 8, "bold"),
+            fg=COLORS["text_muted"],
+            font=FONTS["label"],
             anchor="w"
-        ).pack(fill="x", padx=18, pady=(20, 12))
+        ).pack(fill="x", padx=22, pady=(20, 8))
 
         for icono, nombre in OPCIONES:
 
-            boton = tk.Button(
+            boton = ItemNavegacion(
                 self.frame,
-                text=f"   {icono}     {nombre}",
-                anchor="w",
-                command=lambda n=nombre: self.navegar(n),
-                bg=COLORS["primary"] if nombre == "Inicio"
-                else COLORS["sidebar"],
-                fg=COLORS["white"] if nombre == "Inicio"
-                else COLORS["text"],
-                activebackground=COLORS["green_light"],
-                activeforeground=COLORS["primary"],
-                font=FONTS["sidebar"],
-                relief="flat",
-                bd=0,
-                padx=10,
-                pady=13,
-                cursor="hand2"
+                icono=icono,
+                texto=nombre,
+                comando=lambda n=nombre: self.navegar(n)
             )
 
-            boton.pack(fill="x", padx=8, pady=3)
+            boton.pack(fill="x", padx=10, pady=1)
 
             self.buttons[nombre] = boton
 
-        tk.Frame(
-            self.frame,
-            bg=COLORS["border"],
-            height=1
-        ).pack(fill="x", padx=15, pady=20)
+        self.marcar_activo("Inicio")
+
+        # Nota de identidad al pie, discreta
+        pie = tk.Frame(self.frame, bg=COLORS["sidebar"])
+        pie.pack(side="bottom", fill="x", padx=22, pady=20)
+
+        tk.Frame(pie, bg=COLORS["border"], height=1).pack(fill="x", pady=(0, 14))
 
         tk.Label(
-            self.frame,
-            text="MILPA\n\nCuidando tus cultivos\ncon tecnología",
+            pie,
+            text="MILPA",
             bg=COLORS["sidebar"],
             fg=COLORS["primary"],
-            font=("Aptos", 12, "italic"),
-            justify="center"
-        ).pack(side="bottom", pady=30)
+            font=FONTS["label"],
+            anchor="w"
+        ).pack(fill="x")
+
+        tk.Label(
+            pie,
+            text="Cuidando tus cultivos\ncon tecnología",
+            bg=COLORS["sidebar"],
+            fg=COLORS["text_secondary"],
+            font=FONTS["tiny"],
+            justify="left",
+            anchor="w"
+        ).pack(fill="x", pady=(3, 0))
 
     def navegar(self, nombre):
         self.marcar_activo(nombre)
@@ -95,11 +95,4 @@ class Sidebar:
 
     def marcar_activo(self, nombre):
         for opcion, boton in self.buttons.items():
-            seleccionado = opcion == nombre
-            boton.configure(
-                bg=COLORS["primary"] if seleccionado
-                else COLORS["sidebar"],
-
-                fg=COLORS["white"] if seleccionado
-                else COLORS["text"]
-            )
+            boton.establecer_activo(opcion == nombre)

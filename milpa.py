@@ -134,7 +134,7 @@ def main():
         asignador.imprimir()
 
     # Fase 7: generación MIPS
-    generador_mips = GeneradorMIPS(cuadruplos, asignador)
+    generador_mips = GeneradorMIPS(cuadruplos, asignador, generador.tipos)
 
     salida = args.salida or str(ruta.with_suffix(".asm"))
 

@@ -15,8 +15,9 @@ class ConsolePanel:
 
         self.frame = tk.Frame(
             parent,
-            bg=COLORS["white"],
+            bg=COLORS["console_background"],
             highlightbackground=COLORS["border"],
+            highlightcolor=COLORS["border"],
             highlightthickness=1
         )
 
@@ -30,8 +31,8 @@ class ConsolePanel:
 
         encabezado = tk.Frame(
             self.frame,
-            bg=COLORS["green_light"],
-            height=43
+            bg=COLORS["white"],
+            height=38
         )
 
         encabezado.pack(fill="x")
@@ -39,31 +40,49 @@ class ConsolePanel:
 
         tk.Label(
             encabezado,
-            text="  ▸  Consola del compilador",
-            bg=COLORS["green_light"],
+            text="›_",
+            bg=COLORS["white"],
+            fg=COLORS["primary"],
+            font=FONTS["console"]
+        ).pack(side="left", padx=(16, 8))
+
+        tk.Label(
+            encabezado,
+            text="Consola del compilador",
+            bg=COLORS["white"],
             fg=COLORS["text"],
             font=FONTS["heading"],
             anchor="w"
-        ).pack(fill="both", padx=8)
+        ).pack(side="left")
+
+        tk.Frame(
+            self.frame,
+            bg=COLORS["border_soft"],
+            height=1
+        ).pack(fill="x")
 
         self.consola = tk.Text(
             self.frame,
-            bg=COLORS["white"],
+            bg=COLORS["console_background"],
             fg=COLORS["code"],
             font=FONTS["console"],
             relief="flat",
-            padx=12,
+            bd=0,
+            highlightthickness=0,
+            padx=16,
             pady=10,
+            spacing1=2,
+            spacing3=2,
             height=8,
             state="disabled",
+            selectbackground=COLORS["selection"],
+            inactiveselectbackground=COLORS["green_light"],
             wrap="word"
         )
 
         self.consola.pack(
             fill="both",
-            expand=True,
-            padx=5,
-            pady=5
+            expand=True
         )
 
         # Colores de mensajes

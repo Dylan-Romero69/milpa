@@ -15,8 +15,8 @@ class StatusBar:
 
         self.frame = tk.Frame(
             parent,
-            bg=COLORS["primary"],
-            height=27
+            bg=COLORS["white"],
+            height=28
         )
 
         self.frame.pack(
@@ -42,29 +42,49 @@ class StatusBar:
 
     def _crear_interfaz(self):
 
+        tk.Frame(
+            self.frame,
+            bg=COLORS["border"],
+            height=1
+        ).pack(side="top", fill="x")
+
+        tk.Label(
+            self.frame,
+            text="●",
+            bg=COLORS["white"],
+            fg=COLORS["success"],
+            font=FONTS["tiny"]
+        ).pack(side="left", padx=(16, 6))
+
         tk.Label(
             self.frame,
             textvariable=self.estado,
-            bg=COLORS["primary"],
-            fg=COLORS["white"],
+            bg=COLORS["white"],
+            fg=COLORS["text_secondary"],
             font=FONTS["tiny"]
-        ).pack(side="left", padx=12)
+        ).pack(side="left")
 
         tk.Label(
             self.frame,
             textvariable=self.posicion,
-            bg=COLORS["primary"],
-            fg=COLORS["white"],
+            bg=COLORS["white"],
+            fg=COLORS["text_secondary"],
             font=FONTS["tiny"]
-        ).pack(side="right", padx=12)
+        ).pack(side="right", padx=(0, 16))
+
+        tk.Frame(
+            self.frame,
+            bg=COLORS["border"],
+            width=1
+        ).pack(side="right", fill="y", pady=8, padx=12)
 
         tk.Label(
             self.frame,
             textvariable=self.lenguaje,
-            bg=COLORS["primary"],
-            fg=COLORS["white"],
+            bg=COLORS["white"],
+            fg=COLORS["text_secondary"],
             font=FONTS["tiny"]
-        ).pack(side="right", padx=12)
+        ).pack(side="right")
 
     def actualizar_estado(self, mensaje):
 

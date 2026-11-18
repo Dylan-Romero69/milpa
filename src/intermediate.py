@@ -33,6 +33,22 @@ class Cuadruplo:
         )
 
 
+# Tipo que devuelve cada función predefinida.
+RETORNO_FUNCIONES = {
+    "leer": "decimal",
+    "lloviendo": "booleano",
+    "a_entero": "entero",
+}
+
+OPERADORES_BOOLEANOS = {"<", ">", "<=", ">=", "==", "!=", "y", "o"}
+
+
+def literal_texto(valor):
+    """Representa un texto literal entre comillas para distinguirlo de un nombre."""
+    escapado = str(valor).replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escapado}"'
+
+
 class GeneradorIntermedio:
 
     def __init__(self):
@@ -40,6 +56,8 @@ class GeneradorIntermedio:
         self.contador_temporales = 0
         self.etiquetas = {}
         self.contador_etiquetas = 0
+        # Tipo de cada variable, constante, zona y temporal (lo usa el generador MIPS).
+        self.tipos = {}
 
     def nuevo_temporal(self):
         self.contador_temporales += 1
@@ -79,6 +97,7 @@ class GeneradorIntermedio:
         self.cuadruplos = []
         self.contador_temporales = 0
         self.contador_etiquetas = 0
+        self.tipos = {}
 
         if not isinstance(arbol, Programa):
             raise TypeError("Se esperaba un nodo Programa.")
@@ -98,13 +117,16 @@ class GeneradorIntermedio:
 
         if isinstance(nodo, DeclaracionVariable):
             valor = self.generar_expresion(nodo.valor)
+            self.tipos.setdefault(nodo.nombre, nodo.tipo)
             self.agregar("=", valor, "", nodo.nombre)
 
         elif isinstance(nodo, DeclaracionConstante):
             valor = self.generar_expresion(nodo.valor)
+            self.tipos.setdefault(nodo.nombre, nodo.tipo)
             self.agregar("=", valor, "", nodo.nombre)
 
         elif isinstance(nodo, DeclaracionZona):
+            self.tipos[nodo.nombre] = "zona"
             for campo in nodo.campos:
                 valor = self.generar_expresion(campo.valor)
                 self.agregar("CAMPO", nodo.nombre, campo.nombre, valor)
@@ -167,6 +189,7 @@ class GeneradorIntermedio:
 
     def generar_para_cada(self, nodo):
         inicio = len(self.cuadruplos) + 1
+        self.tipos[nodo.variable] = "zona"
 
         self.agregar(
             "ITER_INICIO",
@@ -195,8 +218,9 @@ class GeneradorIntermedio:
 
         resultado = ""
 
-        if nodo.nombre in {"leer", "lloviendo", "a_entero"}:
+        if nodo.nombre in RETORNO_FUNCIONES:
             resultado = self.nuevo_temporal()
+            self.tipos[resultado] = RETORNO_FUNCIONES[nodo.nombre]
 
         self.agregar(
             "CALL",
@@ -211,6 +235,10 @@ class GeneradorIntermedio:
             return ""
 
         if isinstance(nodo, Literal):
+            if isinstance(nodo.valor, bool):
+                return "verdadero" if nodo.valor else "falso"
+            if isinstance(nodo.valor, str):
+                return literal_texto(nodo.valor)
             return str(nodo.valor)
 
         if isinstance(nodo, Identificador):
@@ -224,6 +252,7 @@ class GeneradorIntermedio:
             derecha = self.generar_expresion(nodo.derecha)
 
             temporal = self.nuevo_temporal()
+            self.tipos[temporal] = self.tipo_binaria(nodo, izquierda, derecha)
 
             self.agregar(
                 nodo.operador,
@@ -237,6 +266,10 @@ class GeneradorIntermedio:
         if isinstance(nodo, OperacionUnaria):
             operando = self.generar_expresion(nodo.operando)
             temporal = self.nuevo_temporal()
+            self.tipos[temporal] = getattr(nodo, "tipo_sem", None) or (
+                "booleano" if nodo.operador == "no"
+                else self.tipo_de(operando)
+            )
 
             self.agregar(
                 "UNARIO_" + nodo.operador,
@@ -256,6 +289,30 @@ class GeneradorIntermedio:
             return ""
 
         return ""
+
+    def tipo_de(self, valor):
+        """Tipo de un operando ya generado (literal, variable o temporal)."""
+        valor = str(valor)
+        if valor in self.tipos:
+            return self.tipos[valor]
+        if valor.startswith('"'):
+            return "texto"
+        if valor in {"verdadero", "falso"}:
+            return "booleano"
+        try:
+            float(valor)
+        except ValueError:
+            return ""
+        return "entero" if valor.lstrip("-").isdigit() else "decimal"
+
+    def tipo_binaria(self, nodo, izquierda, derecha):
+        tipo = getattr(nodo, "tipo_sem", None)
+        if tipo and tipo != "error":
+            return tipo
+        if nodo.operador in OPERADORES_BOOLEANOS:
+            return "booleano"
+        tipos = {self.tipo_de(izquierda), self.tipo_de(derecha)}
+        return "decimal" if "decimal" in tipos else "entero"
 
     def imprimir(self):
         print("\n========== CODIGO INTERMEDIO ==========")

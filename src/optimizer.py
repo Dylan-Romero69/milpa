@@ -75,12 +75,39 @@ class Optimizador:
 
         return str(numero)
 
+    def es_entero(self, valor):
+        return bool(re.fullmatch(r"-?\d+", str(valor)))
+
+    def booleano(self, valor):
+        """True/False si el valor es un literal booleano; None si no lo es."""
+        valor = str(valor).lower()
+        if valor in {"verdadero", "true"}:
+            return True
+        if valor in {"falso", "false"}:
+            return False
+        return None
+
+    def texto_booleano(self, valor):
+        return "verdadero" if valor else "falso"
+
     def evaluar(self, operador, a, b=""):
         """Resuelve operaciones cuyos operandos son constantes."""
         try:
             if operador in self.OPERACIONES_ARITMETICAS:
                 if not self.es_numero(a) or not self.es_numero(b):
                     return None
+
+                # Entre enteros, / y % truncan hacia cero (igual que div en MIPS).
+                if self.es_entero(a) and self.es_entero(b):
+                    x, y = int(a), int(b)
+                    if operador in {"/", "%"}:
+                        if y == 0:
+                            return None
+                        cociente = abs(x) // abs(y)
+                        if (x < 0) != (y < 0):
+                            cociente = -cociente
+                        return str(cociente if operador == "/" else x - y * cociente)
+                    return str({"+": x + y, "-": x - y, "*": x * y}[operador])
 
                 x = float(a)
                 y = float(b)
@@ -96,11 +123,11 @@ class Optimizador:
                         return None
                     resultado = x / y
                 else:
-                    if y == 0:
-                        return None
-                    resultado = x % y
+                    # % solo existe entre enteros.
+                    return None
 
-                return self.valor_numerico(resultado)
+                # Conservar el punto decimal: el resultado sigue siendo decimal.
+                return repr(float(resultado))
 
             if operador in self.OPERACIONES_RELACIONALES:
                 # Solo comparar valores numéricos constantes
@@ -121,32 +148,24 @@ class Optimizador:
                     "!=": lambda: x != y,
                 }
 
-                return str(operaciones[operador]()).lower()
+                return self.texto_booleano(operaciones[operador]())
 
-            if operador == "y":
-                return str(
-                    a.lower() == "verdadero"
-                    and b.lower() == "verdadero"
-                ).lower()
-
-            if operador == "o":
-                return str(
-                    a.lower() == "verdadero"
-                    or b.lower() == "verdadero"
-                ).lower()
+            if operador in {"y", "o"}:
+                # Solo se pliega si ambos lados son literales booleanos.
+                x, y = self.booleano(a), self.booleano(b)
+                if x is None or y is None:
+                    return None
+                return self.texto_booleano(x and y if operador == "y" else x or y)
 
             if operador == "UNARIO_-":
+                if self.es_entero(a):
+                    return str(-int(a))
                 if self.es_numero(a):
-                    return self.valor_numerico(-float(a))
+                    return repr(-float(a))
 
             if operador == "UNARIO_no":
-                valores = {
-                    "verdadero": "falso",
-                    "falso": "verdadero",
-                    "true": "false",
-                    "false": "true",
-                }
-                return valores.get(a.lower())
+                x = self.booleano(a)
+                return None if x is None else self.texto_booleano(not x)
 
         except (ValueError, TypeError, ZeroDivisionError):
             return None
@@ -393,16 +412,29 @@ class Optimizador:
 
             ciclo = self.cuadruplos[inicio:fin]
 
-            # Variables que reciben asignaciones dentro del ciclo
-            modificadas = {
-                c.resultado
-                for c in ciclo
-                if c.operador == "=" and c.resultado
-            }
+            # Variables que cambian dentro del ciclo (asignaciones,
+            # llamadas y el avance de para_cada).
+            modificadas = set()
+            for c in ciclo:
+                if c.operador in {"=", "CALL"} and c.resultado:
+                    modificadas.add(c.resultado)
+                elif c.operador in {"ITER_INICIO", "ITER_SIGUIENTE"}:
+                    modificadas.add(c.argumento1)
+
+            def cambia(valor):
+                return valor in modificadas or valor.split(".")[0] in modificadas
+
+            # Una expresión solo se reutiliza dentro del mismo bloque básico:
+            # si la primera aparición está en una rama que no se ejecutó,
+            # su temporal no tendría valor.
+            bloque_de = {}
+            for numero, (b_inicio, b_fin) in enumerate(self.bloques_basicos()):
+                for posicion in range(b_inicio, b_fin):
+                    bloque_de[posicion] = numero
 
             expresiones = {}
 
-            for c in ciclo:
+            for desplazamiento, c in enumerate(ciclo):
                 if c.operador not in self.OPERACIONES_PURAS:
                     continue
 
@@ -410,10 +442,10 @@ class Optimizador:
                 b = c.argumento2
 
                 # Solo expresiones con operandos invariantes
-                if a in modificadas or b in modificadas:
+                if cambia(a) or cambia(b):
                     continue
 
-                clave = (c.operador, a, b)
+                clave = (bloque_de.get(inicio + desplazamiento), c.operador, a, b)
 
                 if clave in expresiones:
                     temporal_anterior = expresiones[clave]

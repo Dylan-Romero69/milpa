@@ -53,6 +53,8 @@ CAMPOS_ZONA = {
     "cultivo": "texto",
     "humedad_min": "decimal",
     "riego_max": "entero",
+    "fila": "entero",          # opcional: parcela del huerto (empieza en 1)
+    "columna": "entero",       # opcional: va junto con 'fila'
     "nombre": "texto",
 }
 
@@ -100,6 +102,7 @@ class AnalizadorSemantico:
         self.tabla = TablaSimbolos()
         self.errores = errores
         self.zonas = {}          # nombre de zona -> dict con sus campos
+        self.posiciones = {}     # (fila, columna) -> zona que ocupa esa parcela
 
     # ------------------------------------------------------------ errores
     def registrar_error(self, codigo, mensaje, nodo):
@@ -251,7 +254,7 @@ class AnalizadorSemantico:
                 self.registrar_error(
                     "E-SEM-08",
                     f"Campo de zona desconocido '{campo.nombre}' "
-                    "(válidos: cultivo, humedad_min, riego_max).",
+                    "(válidos: cultivo, humedad_min, riego_max, fila, columna).",
                     posicion,
                 )
                 continue
@@ -293,6 +296,12 @@ class AnalizadorSemantico:
                 self.registrar_error(
                     "E-DOM-02", "riego_max debe ser mayor que 0.", _posicion(campo.valor)
                 )
+            if campo.nombre in ("fila", "columna") and valor < 1:
+                self.registrar_error(
+                    "E-SEM-08", f"'{campo.nombre}' debe ser 1 o mayor (es {valor}).",
+                    _posicion(campo.valor),
+                )
+                continue
             datos[campo.nombre] = valor
 
         for obligatorio in ("cultivo", "humedad_min"):
@@ -303,10 +312,30 @@ class AnalizadorSemantico:
                     nodo,
                 )
 
+        if ("fila" in vistos) != ("columna" in vistos):
+            self.registrar_error(
+                "E-SEM-08",
+                f"La zona '{nodo.nombre}' debe indicar 'fila' y 'columna' juntas.",
+                nodo,
+            )
+        elif "fila" in datos and "columna" in datos:
+            posicion = (datos["fila"], datos["columna"])
+            if posicion in self.posiciones:
+                self.registrar_error(
+                    "E-SEM-08",
+                    f"La parcela {posicion[0]}:{posicion[1]} ya está ocupada por la zona "
+                    f"'{self.posiciones[posicion]}'.",
+                    nodo,
+                )
+            else:
+                self.posiciones[posicion] = nodo.nombre
+
         campos = {
             "cultivo": datos.get("cultivo", ""),
             "humedad_min": datos.get("humedad_min", 0.0),
             "riego_max": datos.get("riego_max", RIEGO_MAX_POR_DEFECTO),
+            "fila": datos.get("fila", 0),
+            "columna": datos.get("columna", 0),
             "nombre": nodo.nombre,
         }
         if libre:

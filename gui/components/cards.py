@@ -17,26 +17,42 @@ class Card:
             parent,
             bg=COLORS["white"],
             highlightbackground=COLORS["border"],
+            highlightcolor=COLORS["border"],
             highlightthickness=1
         )
 
         self.header = tk.Frame(
             self.frame,
-            bg=COLORS["green_light"],
-            height=43
+            bg=COLORS["white"],
+            height=44
         )
 
         self.header.pack(fill="x")
         self.header.pack_propagate(False)
 
+        if icon:
+            tk.Label(
+                self.header,
+                text=icon,
+                bg=COLORS["white"],
+                fg=COLORS["primary"],
+                font=FONTS["icon"]
+            ).pack(side="left", padx=(16, 8))
+
         tk.Label(
             self.header,
-            text=f"  {icon}  {title}",
-            bg=COLORS["green_light"],
+            text=title,
+            bg=COLORS["white"],
             fg=COLORS["text"],
             font=FONTS["heading"],
             anchor="w"
-        ).pack(fill="both", padx=8)
+        ).pack(side="left", padx=(0 if icon else 16, 0))
+
+        tk.Frame(
+            self.frame,
+            bg=COLORS["border_soft"],
+            height=1
+        ).pack(fill="x")
 
         self.body = tk.Frame(
             self.frame,
