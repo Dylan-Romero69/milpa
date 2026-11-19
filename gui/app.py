@@ -16,6 +16,7 @@ from gui.components.console import ConsolePanel
 
 from gui.components.statusbar import StatusBar
 from gui.components.widgets import BarraPestanas
+from gui.components.arbol_grafico import crear_vista_arbol, dibujar_arbol
 from src.huerto import parcelas_desde_estado, sensor_simulado
 from src.huerto_codigo import (
     aplicar_huerto_al_codigo, analizar_codigo, parcelas_desde_codigo
@@ -765,6 +766,7 @@ class MilpaIDE:
             "Léxico",
             "Sintáctico",
             "AST",
+            "Árbol gráfico",
             "Semántico",
             "Cuádruplos",
             "Optimización",
@@ -790,6 +792,13 @@ class MilpaIDE:
 
             if fase == "Léxico":
                 self.crear_tabla_lexica(marco)
+
+            elif fase == "Árbol gráfico":
+                self.canvas_arbol = crear_vista_arbol(marco)
+                dibujar_arbol(
+                    self.canvas_arbol, None,
+                    "Esperando compilación...\n\nEl árbol gráfico aparecerá aquí."
+                )
 
             else:
                 texto = tk.Text(
@@ -957,6 +966,8 @@ class MilpaIDE:
                     f"Esperando resultados de {fase}..."
                 )
                 widget.configure(state="disabled")
+
+        dibujar_arbol(self.canvas_arbol, None, "Esperando resultados de Árbol gráfico...")
 
 
     # =====================================================
@@ -1290,11 +1301,19 @@ class MilpaIDE:
             tokens = lexer.analizar()
             self.mostrar_tokens(tokens)
             if errores.hay_errores():
+                dibujar_arbol(
+                    self.canvas_arbol, None,
+                    "No se puede dibujar el árbol: hay errores léxicos."
+                )
                 mostrar_errores()
                 return
 
             arbol = Parser(tokens, errores).analizar()
             if arbol is None or errores.hay_errores():
+                dibujar_arbol(
+                    self.canvas_arbol, None,
+                    "No se puede dibujar el árbol: hay errores de sintaxis."
+                )
                 mostrar_errores()
                 return
             salida = io.StringIO()
@@ -1304,6 +1323,7 @@ class MilpaIDE:
                 "Sintáctico", "Análisis sintáctico correcto.\nAST construido correctamente."
             )
             self.mostrar_texto_fase("AST", salida.getvalue())
+            dibujar_arbol(self.canvas_arbol, arbol)
 
             semantico = AnalizadorSemantico(errores)
             semantico.analizar(arbol)
