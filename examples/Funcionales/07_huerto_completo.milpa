@@ -1,0 +1,145 @@
+// =============================================================
+// Ejemplo integral de MILPA: usa todas las construcciones del
+// lenguaje en un día de riego para un huerto de tres parcelas.
+// =============================================================
+
+// ---------- Constantes de los cuatro tipos ----------
+constante entero MINUTOS_POR_TURNO = 2
+constante decimal LITROS_POR_MINUTO = 1.5
+constante texto RESPONSABLE = "Equipo Milpa"
+constante booleano MODO_AHORRO = falso
+
+// ---------- Zonas (con y sin posición en el huerto) ----------
+zona norte {
+    cultivo: "jitomate",
+    humedad_min: 45.0,
+    riego_max: 6,
+    fila: 1,
+    columna: 1
+}
+zona centro {
+    cultivo: "maiz",
+    humedad_min: 35,
+    riego_max: 4,
+    fila: 1,
+    columna: 2
+}
+zona sur {
+    cultivo: "chile",
+    humedad_min: 40.0,
+    riego_max: 5,
+    fila: 2,
+    columna: 1
+}
+zona invernadero {
+    cultivo: "fresas",
+    humedad_min: 55.0
+}
+
+// ---------- Variables globales ----------
+entero dia = 1
+entero dias_totales = 2
+entero zonas_regadas = 0
+entero minutos_totales = 0
+decimal litros_totales = 0.0
+decimal temperatura_maxima = -40.0
+texto estado = "iniciando"
+booleano hubo_alerta = falso
+
+registrar("Responsable: ", RESPONSABLE)
+registrar("Estado: ", estado)
+
+// ---------- Ciclo principal: un recorrido por día ----------
+mientras (dia <= dias_totales) {
+    registrar("===== Dia ", dia, " =====")
+    booleano llueve = lloviendo()
+
+    para_cada zona z en [norte, centro, sur] {
+        decimal humedad = leer(z, "humedad")
+        decimal temperatura = leer(z, "temperatura")
+
+        // Temperatura máxima registrada
+        si (temperatura > temperatura_maxima) {
+            temperatura_maxima = temperatura
+        }
+
+        // Alerta: humedad fuera de rango o calor extremo
+        si (humedad < 0.0 o humedad > 100.0 o temperatura >= 40.0) {
+            hubo_alerta = verdadero
+            registrar("ALERTA en ", z.nombre, ": humedad ", humedad, " temp ", temperatura)
+        }
+
+        si (no llueve y humedad < z.humedad_min) {
+            // Ciclo anidado: riega por turnos hasta alcanzar la humedad mínima
+            entero minutos = 0
+            entero turnos = 0
+            mientras (humedad < z.humedad_min y minutos + MINUTOS_POR_TURNO <= z.riego_max) {
+                regar(z, MINUTOS_POR_TURNO)
+                minutos = minutos + MINUTOS_POR_TURNO
+                turnos = turnos + 1
+                humedad = humedad + 3.5 * MINUTOS_POR_TURNO
+            }
+
+            si (minutos > 0) {
+                zonas_regadas = zonas_regadas + 1
+                minutos_totales = minutos_totales + minutos
+                litros_totales = litros_totales + minutos * LITROS_POR_MINUTO
+                registrar(z.cultivo, " en ", z.nombre, ": ", turnos, " turnos, ", minutos, " min")
+            } si_no {
+                registrar(z.nombre, ": riego_max demasiado corto para un turno")
+            }
+
+            si (humedad < z.humedad_min) {
+                registrar(z.nombre, " sigue seca (", humedad, " < ", z.humedad_min, ")")
+            }
+        } si_no {
+            si (llueve) {
+                registrar(z.nombre, ": llueve, no se riega")
+            } si_no {
+                registrar(z.nombre, ": humedad suficiente (", humedad, ")")
+            }
+        }
+    }
+
+    // El invernadero no depende de la lluvia y se riega con duración fija
+    decimal humedad_inv = leer(invernadero, "humedad")
+    si (humedad_inv < invernadero.humedad_min) {
+        regar(invernadero, 3)
+        minutos_totales = minutos_totales + 3
+        litros_totales = litros_totales + 3 * LITROS_POR_MINUTO
+        registrar("Invernadero (", invernadero.cultivo, ") regado 3 min")
+    }
+
+    dia = dia + 1
+}
+
+// ---------- Resumen: aritmética, conversión y operadores ----------
+entero litros_enteros = a_entero(litros_totales)
+entero promedio_por_dia = minutos_totales / dias_totales
+entero minutos_sobrantes = minutos_totales % dias_totales
+decimal promedio_exacto = minutos_totales / 2.0
+entero ahorro = -(litros_enteros - 100)
+booleano dentro_presupuesto = litros_totales <= 60.0 y litros_enteros != 0
+booleano todo_normal = no hubo_alerta
+
+si (MODO_AHORRO o litros_totales > 60.0) {
+    estado = "consumo alto"
+} si_no {
+    si (zonas_regadas == 0) {
+        estado = "sin riego"
+    } si_no {
+        estado = "terminado"
+    }
+}
+
+registrar("===== Resumen =====")
+registrar("Zonas regadas: ", zonas_regadas)
+registrar("Minutos totales: ", minutos_totales)
+registrar("Litros totales: ", litros_totales, " (aprox. ", litros_enteros, ")")
+registrar("Promedio por dia: ", promedio_por_dia, " min, sobrante ", minutos_sobrantes)
+registrar("Promedio exacto: ", promedio_exacto)
+registrar("Litros por debajo de 100: ", ahorro)
+registrar("Temperatura maxima: ", temperatura_maxima)
+registrar("Dentro de presupuesto: ", dentro_presupuesto)
+registrar("Sin alertas: ", todo_normal)
+registrar("Estado final: ", estado)
